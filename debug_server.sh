@@ -1,8 +1,12 @@
 #!/bin/bash
-# Usage: debug_server.sh <executable> <arguments>
+# Usage: debug_server.sh <default_port> <executable> <arguments>
 
-GDBSERVER_BIN=/autofs/nccs-svm1_sw/summit/.swci/0-core/opt/spack/20180914/linux-rhel7-ppc64le/gcc-4.8.5/gdb-8.2-wqepjcgazxilipyw7oqoee24dnczbeac/bin
-GDB_HOST=$(hostname)
-GDB_PORT=$(( 60000 + $OMPI_COMM_WORLD_RANK ))
+DEFAULT_PORT=$1
+GDB_HOST=$(hostname) # Do we need the host name ?
+GDB_PORT=$(( DEFAULT_PORT + $OMPI_COMM_WORLD_RANK ))
+
+# Get rid of the default port in the param list
+shift
+
 echo "GDB server for rank $OMPI_COMM_WORLD_RANK available on $GDB_HOST:$GDB_PORT"
-exec $GDBSERVER_BIN/gdbserver :$GDB_PORT $*
+exec gdbserver :$GDB_PORT $*
