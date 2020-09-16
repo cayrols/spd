@@ -19,6 +19,9 @@ PORT=60000
 VERTICAL=v
 HORIZONTAL=h
 
+GDB=gdb
+GDBSERVER=gdbserver
+
 ################################################################################
 #                                  FUNCTIONS                                  #
 ################################################################################
@@ -55,6 +58,9 @@ function chelp(){
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
+  bold    "REMARKS"
+  echo -e "\t\tOn some plateformes, the gdb env does not work properly."
+  echo -e "\t\tTherefore, if needed, export the GDB_BIN and GDBSERVER_BIN."
   bold    "EXAMPLES"
   echo -e "\t\tThere is a test folder with a toto.c program."
   echo -e "\t\tGo to test and compile it using make."
@@ -117,12 +123,18 @@ function create_pane() {
   local SIZE=$3
   local HOST=$4
   local PORT=$5
-  local cmd="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
+ #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
+  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'""
  #cmd="gdb target remote ${HOST}:${PORT}"
- #cmd="bash"
+ #cmd="sh"
 
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
+
+ #sleep 2
+
+ #echo "tmux send-keys -t $((PANE + 1)) "$GDBCMD" Enter"
+ #tmux send-keys -t $((PANE + 1)) "$GDBCMD" Enter
 }
 
 ################################################################################
@@ -143,12 +155,25 @@ echo "CMDLINE: $CMDLINE"
 echo "MPI params: $MPI_PARAM"
 echo "EXEC params: $EXEC_PARAM"
 
+
 #===============================
 # Create the gdbserver if needed
 #===============================
+if [ ! -z "${GDB_BIN}" ]; then
+  GDB=$GDB_BIN/gdb
+else
+  echo "TODO add checker for gdb"
+fi
+
+if [ ! -z "${GDBSERVER_BIN}" ]; then
+  GDBSERVER=$GDBSERVER_BIN/gdbserver
+else
+  echo "TODO add checker for gdbserver"
+fi
+
 if [ $ATTACH -eq $FALSE ]; then
   #create the server
-  SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${PGDB_BIN}/debug_server.sh ${PORT} &:" )
+  SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${PGDB_BIN}/debug_server.sh $GDBSERVER ${PORT} &:" )
 
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
   tmux send-keys -t 0 "$SERVERCMD" Enter
@@ -177,6 +202,7 @@ create_pane 0 $HORIZONTAL 70 ${HOSTS[0]} $PORT
 
 # Create the columns
 for q in $(seq 1 $((Q-1))); do
+  sleep 3
   HOST=${HOSTS[0]}
   create_pane $((q)) $HORIZONTAL $((100 - 100 / (Q - q + 1) )) $HOST $((PORT + q))
 done
