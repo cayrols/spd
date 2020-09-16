@@ -178,7 +178,8 @@ if [ $ATTACH -eq $FALSE ]; then
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
   tmux send-keys -t 0 "$SERVERCMD" Enter
 
- #sleep 2
+  echo "Wait for the gdbserver to start: 2sec"
+  sleep 2
 fi
 
 #================
@@ -202,7 +203,7 @@ create_pane 0 $HORIZONTAL 70 ${HOSTS[0]} $PORT
 
 # Create the columns
 for q in $(seq 1 $((Q-1))); do
-  sleep 3
+ #sleep 3
   HOST=${HOSTS[0]}
   create_pane $((q)) $HORIZONTAL $((100 - 100 / (Q - q + 1) )) $HOST $((PORT + q))
 done
@@ -215,6 +216,6 @@ for q in $(seq 1 $Q); do
 
   for p in $(seq 2 $((P - 0))); do
     HOST=${HOSTS[$((p - 1))]}
-    create_pane $col_pane_id $VERTICAL $((100 / (P - p + 2) )) $HOST $((PORT + (q - 1 ) * P + p - 1))
+    create_pane $col_pane_id $VERTICAL $((100 / (P - p + 2) )) $HOST $((PORT + (p - 1) * Q + q - 1))
   done
 done
