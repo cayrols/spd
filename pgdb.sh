@@ -7,6 +7,7 @@ TRUE=1
 FALSE=0
 
 #Disable the tmux creation
+DEVMODE=$TRUE
 DEVMODE=$FALSE
 
 #By default we assume that the gdbserver needs to be started
@@ -42,25 +43,27 @@ function chelp(){
   bold    "NAME"
   echo -e "\t$0 - sets the gdbserver as well as the tmux env to ease the debug"
   bold    "SYNOPSIS"
-  echo -e "\t$0 [OPTIONS]"
-  bold    "DESCRIPTION"
-  echo -e "\tNone"
-  bold    "OPTIONS"
-  bold    "\t-p <int>"
-  echo -e "\t\tThe number of hosts"
-  bold    "\t-q <int>"
-  echo -e "\t\tThe number of MPI processes per host"
-  bold    "\t--port <int>"
-  echo -e "\t\tThe port used by the gdbserver. Each MPI process is associated"
-  echo -e "\t\twith this port + MPI_rank."
-  bold    "\t--attach"
-  echo -e "\t\tDo not create the gdbserver. Instead, just consider the server"
-  echo -e "\t\tset and listening on the ports as described above."
+  echo -e "\t$0 [OPTIONS] --exec <exec_name> --run <commandline>"
   bold    "\t--exec <exec_name>"
   echo -e "\t\tThe name of the executable that is used to split the <commandline>"
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
+  bold    "DESCRIPTION"
+  echo -e "\tNone"
+  bold    "OPTIONS"
+  bold    "\t-p <int: DEFAULT $P>"
+  echo -e "\t\tThe number of hosts"
+  bold    "\t-q <int: DEFAULT $Q>"
+  echo -e "\t\tThe number of MPI processes per host"
+  bold    "\t--port <int: DEFAULT $PORT>"
+  echo -e "\t\tThe port used by the gdbserver. Each MPI process is associated"
+  echo -e "\t\twith this port + MPI_rank."
+  bold    "\t--gdbaddcmd 'cmd'"
+  echo -e "\t\tAdd the 'cmd' commands to gdb. USE the gdb syntax -ex for each."
+  bold    "\t--attach"
+  echo -e "\t\tDo not create the gdbserver. Instead, just consider the server"
+  echo -e "\t\tset and listening on the ports as described above."
   bold    "REMARKS"
   echo -e "\t\tOn some plateformes, the gdb env does not work properly."
   echo -e "\t\tTherefore, if needed, export the GDB_BIN and GDBSERVER_BIN."
@@ -73,6 +76,8 @@ function chelp(){
   echo -e "\t\t\t../pgdb.sh -p 1 -q 2 --port 65000 --exec toto --run mpirun -n 2 toto"
   echo -e "\t\tFinally, attach to the tmux session."
   echo -e "\t\tTIPS : during debug session, the bind 'C-b z' focuses on the current pane."
+  echo -e "\t\tTIPS : during debug session, the command kill-all -a -t 0 closes"
+  echo -e "\t\t\tall panes except for the pane 0 (entered using 'C-b :')."
 }
 
 function parse_param(){
@@ -95,6 +100,11 @@ function parse_param(){
       --port)
         shift
         PORT=$1
+        shift
+        ;;
+      --gdbaddcmd)
+        shift
+        GDBADDCMD="$1"
         shift
         ;;
       --attach)
@@ -120,6 +130,7 @@ function parse_param(){
 }
 
 #create the panes
+# NOTE: Use the global var GDBADDCMD
 function create_pane() {
   local PANE=$1
   local ORIENT=$2
@@ -127,19 +138,15 @@ function create_pane() {
   local HOST=$4
   local PORT=$5
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
-  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'""
+  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD"
  #cmd="gdb target remote ${HOST}:${PORT}"
  #cmd="sh"
 
+  sleep 1
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   if [ $DEVMODE -eq $FALSE ]; then
     tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
   fi
-
- #sleep 2
-
- #echo "tmux send-keys -t $((PANE + 1)) "$GDBCMD" Enter"
- #tmux send-keys -t $((PANE + 1)) "$GDBCMD" Enter
 }
 
 ################################################################################
@@ -210,7 +217,6 @@ create_pane 0 $HORIZONTAL 70 ${HOSTS[0]} $PORT
 
 # Create the columns
 for q in $(seq 1 $((Q-1))); do
- #sleep 3
   HOST=${HOSTS[0]}
   create_pane $((q)) $HORIZONTAL $((100 - 100 / (Q - q + 1) )) $HOST $((PORT + q))
 done
