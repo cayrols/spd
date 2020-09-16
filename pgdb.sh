@@ -6,6 +6,9 @@
 TRUE=1
 FALSE=0
 
+#Disable the tmux creation
+DEVMODE=$FALSE
+
 #By default we assume that the gdbserver needs to be started
 # when the attach flag is set to true, the gdbserver cretion is skipped
 ATTACH=$FALSE
@@ -129,7 +132,9 @@ function create_pane() {
  #cmd="sh"
 
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
-  tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
+  if [ $DEVMODE -eq $FALSE ]; then
+    tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
+  fi
 
  #sleep 2
 
@@ -176,7 +181,9 @@ if [ $ATTACH -eq $FALSE ]; then
   SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${PGDB_BIN}/debug_server.sh $GDBSERVER ${PORT} &:" )
 
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
-  tmux send-keys -t 0 "$SERVERCMD" Enter
+  if [ $DEVMODE -eq $FALSE ]; then
+    tmux send-keys -t 0 "$SERVERCMD" Enter
+  fi
 
   echo "Wait for the gdbserver to start: 2sec"
   sleep 2
@@ -186,7 +193,7 @@ fi
 # Detect the hosts
 #================
 if [[ "$MPI_PARAM" == *"-H"* ]]; then
-  HOSTSLOCATION=$( echo $MPI_PARAM | sed "s/^.*-H[ ]*//" )
+  HOSTSLOCATION=$( echo $MPI_PARAM | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
   HOSTS=( $(echo $HOSTSLOCATION | sed "s/:[0-9]*,*/ /gI" ) )
 else
   echo "No -H parameters given to mpirun => trying to detect the hostnames that will be sorted"
