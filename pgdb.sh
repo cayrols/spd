@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 # Usage: pgdb [args...] -exec <exec_name> --run <classical command to execute>
 # We use the exec_name to split the classical command into the mpi param and
 # the exec param
@@ -130,7 +130,7 @@ function parse_param(){
 }
 
 #create the panes
-# NOTE: Use the global var GDBADDCMD
+# NOTE: Use the bash global vars GDBADDCMD and EXEC
 function create_pane() {
   local PANE=$1
   local ORIENT=$2
@@ -138,15 +138,18 @@ function create_pane() {
   local HOST=$4
   local PORT=$5
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
-  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD"
+  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
  #cmd="gdb target remote ${HOST}:${PORT}"
- #cmd="sh"
+ #cmd=$GDB
 
   sleep 1
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   if [ $DEVMODE -eq $FALSE ]; then
     tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
+   #tmux send-keys -t $PANE "set sysroot target:/" Enter
+   #tmux send-keys -t $PANE "target remote ${HOST}:${PORT}" Enter
   fi
+
 }
 
 ################################################################################
