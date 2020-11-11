@@ -23,8 +23,9 @@ PORT=60000
 VERTICAL=v
 HORIZONTAL=h
 
-GDB=gdb
-GDBSERVER=gdbserver
+GDBEXEC=gdb
+GDBSERVEREXEC=gdbserver
+
 
 ################################################################################
 #                                  FUNCTIONS                                  #
@@ -64,6 +65,8 @@ function chelp(){
   bold    "\t--attach"
   echo -e "\t\tDo not create the gdbserver. Instead, just consider the server"
   echo -e "\t\tset and listening on the ports as described above."
+  bold    "\t--cudagdb"
+  echo -e "\t\tUse cuda-gdb and cuda-gdbserver instead of gdb and gdbserver."
   bold    "REMARKS"
   echo -e "\t\tOn some plateformes, the gdb env does not work properly."
   echo -e "\t\tTherefore, if needed, export the GDB_BIN and GDBSERVER_BIN."
@@ -95,6 +98,11 @@ function parse_param(){
       -q)
         shift
         Q=$1
+        shift
+        ;;
+      --cudagdb)
+        GDBEXEC=cuda-gdb
+        GDBSERVEREXEC=cuda-gdbserver
         shift
         ;;
       --port)
@@ -138,7 +146,8 @@ function create_pane() {
   local HOST=$4
   local PORT=$5
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
-  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+  local cmd="$GDB --cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'" -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+ #cmd="$GDB --cuda-use-lockfile=0 $EXEC"
  #cmd="gdb target remote ${HOST}:${PORT}"
  #cmd=$GDB
 
@@ -170,20 +179,28 @@ echo "CMDLINE: $CMDLINE"
 echo "MPI params: $MPI_PARAM"
 echo "EXEC params: $EXEC_PARAM"
 
+# Source the RC file that will overwrite the path
+#   of GDB_BIN, GDBSERVER_BIN, and PGDB_BIN
+if [ -e $HOME/.pgdbrc ]; then
+  echo "Load $HOME/.pgdbrc"
+  source $HOME/.pgdbrc
+fi
 
 #===============================
 # Create the gdbserver if needed
 #===============================
 if [ ! -z "${GDB_BIN}" ]; then
-  GDB=$GDB_BIN/gdb
+  GDB=$GDB_BIN/$GDBEXEC
 else
   echo "TODO add checker for gdb"
+  GDB=$GDBEXEC
 fi
 
 if [ ! -z "${GDBSERVER_BIN}" ]; then
-  GDBSERVER=$GDBSERVER_BIN/gdbserver
+  GDBSERVER=$GDBSERVER_BIN/$GDBSERVEREXEC
 else
   echo "TODO add checker for gdbserver"
+  GDBSERVER=$GDBSERVEREXEC
 fi
 
 if [ $ATTACH -eq $FALSE ]; then
