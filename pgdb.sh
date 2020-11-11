@@ -7,8 +7,8 @@ TRUE=1
 FALSE=0
 
 #Disable the tmux creation
-DEVMODE=$TRUE
 DEVMODE=$FALSE
+DEVMODE=$TRUE
 
 #By default we assume that the gdbserver needs to be started
 # when the attach flag is set to true, the gdbserver cretion is skipped
@@ -26,6 +26,8 @@ HORIZONTAL=h
 GDBEXEC=gdb
 GDBSERVEREXEC=gdbserver
 
+TMUXSESSIONNAME=debug
+PGDBWAITINGTIME=2
 
 ################################################################################
 #                                  FUNCTIONS                                  #
@@ -35,6 +37,12 @@ function bold(){
 
   echo -e "\033[1m$1\033[0m"
 
+}
+
+
+
+function step(){
+  echo -e "\n******** $1"
 }
 
 
@@ -174,16 +182,20 @@ parse_param "$@"
 MPI_PARAM=$(echo $CMDLINE | sed "s:${EXEC} .*$::" | sed "s%${EXEC}%%" )
 EXEC_PARAM=$(echo $CMDLINE | sed "s:^.*${EXEC}::" )
 
+step "Parsed required information"
 echo "EXECUTION: grid of ${P}x${Q}"
 echo "CMDLINE: $CMDLINE"
 echo "MPI params: $MPI_PARAM"
 echo "EXEC params: $EXEC_PARAM"
 
+step "Configuration file"
 # Source the RC file that will overwrite the path
 #   of GDB_BIN, GDBSERVER_BIN, and PGDB_BIN
 if [ -e $HOME/.pgdbrc ]; then
   echo "Load $HOME/.pgdbrc"
   source $HOME/.pgdbrc
+else
+  echo "No .gdbrc file found in $HOME"
 fi
 
 #===============================
@@ -203,22 +215,41 @@ else
   GDBSERVER=$GDBSERVEREXEC
 fi
 
+
+# Check that tmux session already exists
+step "Gestion of the tmux"
+echo "Checking session $TMUXSESSIONNAME"
+
+tmuxsessions=$(tmux ls 2>/dev/null | grep $TMUXSESSIONNAME)
+tmuxExist=$?
+if [ $tmuxExist -eq 1 ]; then
+  echo "Creation of the tmux session named '$TMUXSESSIONNAME'"
+  tmux new -s $TMUXSESSIONNAME
+else
+  echo "Tmux session named '$TMUXSESSIONNAME' already exists"
+fi
+
+echo "Attach to the session $TMUXSESSIONNAME:\ttmux attach -t $TMUXSESSIONNAME"
+
 if [ $ATTACH -eq $FALSE ]; then
   #create the server
   SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${PGDB_BIN}/debug_server.sh $GDBSERVER ${PORT} &:" )
 
+  step "Creation of the gdbserver"
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
   if [ $DEVMODE -eq $FALSE ]; then
     tmux send-keys -t 0 "$SERVERCMD" Enter
   fi
 
-  echo "Wait for the gdbserver to start: 2sec"
-  sleep 2
+
+  echo -e "\nWait for the gdbserver to start: $PGDBWAITINGTIME s"
+  sleep $PGDBWAITINGTIME
 fi
 
 #================
 # Detect the hosts
 #================
+step "Detection of the hosts"
 if [[ "$MPI_PARAM" == *"-H"* ]]; then
   HOSTSLOCATION=$( echo $MPI_PARAM | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
   HOSTS=( $(echo $HOSTSLOCATION | sed "s/:[0-9]*,*/ /gI" ) )
@@ -233,6 +264,7 @@ echo "HOSTS : ${HOSTS[@]}"
 #================
 # Create the env for the panes
 #================
+step "Creation of the pane"
 create_pane 0 $HORIZONTAL 70 ${HOSTS[0]} $PORT
 
 # Create the columns
