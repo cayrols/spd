@@ -7,8 +7,8 @@ TRUE=1
 FALSE=0
 
 #Disable the tmux creation
-DEVMODE=$FALSE
 DEVMODE=$TRUE
+DEVMODE=$FALSE
 
 #By default we assume that the gdbserver needs to be started
 # when the attach flag is set to true, the gdbserver cretion is skipped
@@ -137,6 +137,11 @@ function parse_param(){
         CMDLINE=$*
         break
         ;;
+      --dev)#Intent to be removed
+        shift
+        DEVMODE=$TRUE
+        break
+        ;;
       *)
         echo "$1 unknown argument" 1
         shift
@@ -222,14 +227,18 @@ echo "Checking session $TMUXSESSIONNAME"
 
 tmuxsessions=$(tmux ls 2>/dev/null | grep $TMUXSESSIONNAME)
 tmuxExist=$?
+echo "#sessions: $tmuxNsession"
 if [ $tmuxExist -eq 1 ]; then
   echo "Creation of the tmux session named '$TMUXSESSIONNAME'"
   tmux new -s $TMUXSESSIONNAME
 else
   echo "Tmux session named '$TMUXSESSIONNAME' already exists"
+  #Ensure this session is the current one by attaching to it if more than one
+  tmuxNsession=$(tmux ls | wc -l)
+  if [ $tmuxNsession -gt 1 ]; then
+    tmux attach -t $TMUXSESSIONNAME
+  fi
 fi
-
-echo "Attach to the session $TMUXSESSIONNAME:\ttmux attach -t $TMUXSESSIONNAME"
 
 if [ $ATTACH -eq $FALSE ]; then
   #create the server
@@ -284,3 +293,5 @@ for q in $(seq 1 $Q); do
     create_pane $col_pane_id $VERTICAL $((100 / (P - p + 2) )) $HOST $((PORT + (p - 1) * Q + q - 1))
   done
 done
+
+echo -e "\nAttach to the session $TMUXSESSIONNAME:\ttmux attach -t $TMUXSESSIONNAME"
