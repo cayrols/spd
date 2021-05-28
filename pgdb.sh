@@ -26,6 +26,8 @@ HORIZONTAL=h
 GDBEXEC=gdb
 GDBSERVEREXEC=gdbserver
 
+MY_TMUX_TMPDIR=$HOME/tmux_tmp
+TMUXCMD="tmux -S $MY_TMUX_TMPDIR"
 TMUXSESSIONNAME=debug
 PGDBWAITINGTIME=2
 
@@ -167,7 +169,7 @@ function create_pane() {
   sleep 1
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   if [ $DEVMODE -eq $FALSE ]; then
-    tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
+    $TMUXCMD splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
    #tmux send-keys -t $PANE "set sysroot target:/" Enter
    #tmux send-keys -t $PANE "target remote ${HOST}:${PORT}" Enter
   fi
@@ -203,6 +205,21 @@ else
   echo "No .gdbrc file found in $HOME"
 fi
 
+#================
+# Detect the hosts
+#================
+step "Detection of the hosts"
+if [[ "$MPI_PARAM" == *"-H"* ]]; then
+  HOSTSLOCATION=$( echo $MPI_PARAM | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
+  HOSTS=( $(echo $HOSTSLOCATION | sed "s/:[0-9]*,*/ /gI" ) )
+else
+  echo "No -H parameters given to mpirun => trying to detect the hostnames that will be sorted"
+  HOSTS_RAW_INFO=$( $MPI_PARAM hostname )
+  echo $HOSTS_RAW_INFO
+  HOSTS=( $(echo $HOSTS_RAW_INFO | tr ' ' '\n' | sort | uniq ) )
+fi
+echo "HOSTS : ${HOSTS[@]}"
+
 #===============================
 # Create the gdbserver if needed
 #===============================
@@ -225,18 +242,18 @@ fi
 step "Gestion of the tmux"
 echo "Checking session $TMUXSESSIONNAME"
 
-tmuxsessions=$(tmux ls 2>/dev/null | grep $TMUXSESSIONNAME)
+tmuxsessions=$($TMUXCMD ls 2>/dev/null | grep $TMUXSESSIONNAME)
 tmuxExist=$?
 echo "#sessions: $tmuxNsession"
 if [ $tmuxExist -eq 1 ]; then
   echo "Creation of the tmux session named '$TMUXSESSIONNAME'"
-  tmux new -s $TMUXSESSIONNAME
+  $TMUXCMD new -s $TMUXSESSIONNAME
 else
   echo "Tmux session named '$TMUXSESSIONNAME' already exists"
   #Ensure this session is the current one by attaching to it if more than one
-  tmuxNsession=$(tmux ls | wc -l)
+  tmuxNsession=$($TMUXCMD ls | wc -l)
   if [ $tmuxNsession -gt 1 ]; then
-    tmux attach -t $TMUXSESSIONNAME
+    $TMUXCMD attach -t $TMUXSESSIONNAME
   fi
 fi
 
@@ -247,28 +264,13 @@ if [ $ATTACH -eq $FALSE ]; then
   step "Creation of the gdbserver"
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
   if [ $DEVMODE -eq $FALSE ]; then
-    tmux send-keys -t 0 "$SERVERCMD" Enter
+    $TMUXCMD send-keys -t 0 "$SERVERCMD" Enter
   fi
 
 
   echo -e "\nWait for the gdbserver to start: $PGDBWAITINGTIME s"
   sleep $PGDBWAITINGTIME
 fi
-
-#================
-# Detect the hosts
-#================
-step "Detection of the hosts"
-if [[ "$MPI_PARAM" == *"-H"* ]]; then
-  HOSTSLOCATION=$( echo $MPI_PARAM | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
-  HOSTS=( $(echo $HOSTSLOCATION | sed "s/:[0-9]*,*/ /gI" ) )
-else
-  echo "No -H parameters given to mpirun => trying to detect the hostnames that will be sorted"
-  HOSTS_RAW_INFO=$( $MPI_PARAM hostname )
-  echo $HOSTS_RAW_INFO
-  HOSTS=( $(echo $HOSTS_RAW_INFO | tr ' ' '\n' | sort | uniq ) )
-fi
-echo "HOSTS : ${HOSTS[@]}"
 
 #================
 # Create the env for the panes
@@ -294,4 +296,4 @@ for q in $(seq 1 $Q); do
   done
 done
 
-echo -e "\nAttach to the session $TMUXSESSIONNAME:\ttmux attach -t $TMUXSESSIONNAME"
+echo -e "\nAttach to the session $TMUXSESSIONNAME:\t$TMUXCMD attach -t $TMUXSESSIONNAME"
