@@ -161,7 +161,8 @@ function create_pane() {
   local HOST=$4
   local PORT=$5
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
-  local cmd="$GDB --cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'" -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+ #local cmd="$GDB --cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'" -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
  #cmd="$GDB --cuda-use-lockfile=0 $EXEC"
  #cmd="gdb target remote ${HOST}:${PORT}"
  #cmd=$GDB

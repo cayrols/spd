@@ -11,5 +11,7 @@ shift
 shift
 
 echo "GDB server for rank $OMPI_COMM_WORLD_RANK available on $GDB_HOST:$GDB_PORT"
-echo "exec $GDB_SERVER --cuda-use-lockfile=0 :$GDB_PORT $*"
-exec $GDB_SERVER --cuda-use-lockfile=0 :$GDB_PORT $*
+#echo "exec $GDB_SERVER --cuda-use-lockfile=0 :$GDB_PORT $*"
+#exec $GDB_SERVER --cuda-use-lockfile=0 :$GDB_PORT $*
+echo "exec $GDB_SERVER :$GDB_PORT $*"
+exec $GDB_SERVER :$GDB_PORT $*
