@@ -93,6 +93,18 @@ function chelp(){
   echo -e "\t\t\tall panes except for the pane 0 (entered using 'C-b :')."
 }
 
+# This peice of code is needed here since the parameters can overwrite part
+# of the content of the configuration file.
+step "Configuration file"
+# Source the RC file that will overwrite the path
+#   of GDB_BIN, GDBSERVER_BIN, and PGDB_BIN
+if [ -e $HOME/.pgdbrc ]; then
+  echo "Load $HOME/.pgdbrc"
+  source $HOME/.pgdbrc
+else
+  echo "No .gdbrc file found in $HOME"
+fi
+
 function parse_param(){
   while [ $# -gt 0 ]; do
     case $1 in
@@ -111,8 +123,8 @@ function parse_param(){
         shift
         ;;
       --cudagdb)
-        GDBEXEC=cuda-gdb
-        GDBSERVEREXEC=cuda-gdbserver
+        GDBEXECNAME=cuda-gdb
+        GDBSERVEREXECNAME=cuda-gdbserver
         shift
         ;;
       --port)
@@ -161,8 +173,9 @@ function create_pane() {
   local HOST=$4
   local PORT=$5
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
- #local cmd="$GDB --cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'" -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
-  local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+ #local gdb_params="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+  local cmd="$GDB $GDBPARAMS -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+ #local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
  #cmd="$GDB --cuda-use-lockfile=0 $EXEC"
  #cmd="gdb target remote ${HOST}:${PORT}"
  #cmd=$GDB
@@ -196,16 +209,6 @@ echo "CMDLINE: $CMDLINE"
 echo "MPI params: $MPI_PARAM"
 echo "EXEC params: $EXEC_PARAM"
 
-step "Configuration file"
-# Source the RC file that will overwrite the path
-#   of GDB_BIN, GDBSERVER_BIN, and PGDB_BIN
-if [ -e $HOME/.pgdbrc ]; then
-  echo "Load $HOME/.pgdbrc"
-  source $HOME/.pgdbrc
-else
-  echo "No .gdbrc file found in $HOME"
-fi
-
 #================
 # Detect the hosts
 #================
@@ -225,17 +228,17 @@ echo "HOSTS : ${HOSTS[@]}"
 # Create the gdbserver if needed
 #===============================
 if [ ! -z "${GDB_BIN}" ]; then
-  GDB=$GDB_BIN/$GDBEXEC
+  GDB=$GDB_BIN/$GDBEXECNAME
 else
   echo "TODO add checker for gdb"
-  GDB=$GDBEXEC
+  GDB=$GDBEXECNAME
 fi
 
 if [ ! -z "${GDBSERVER_BIN}" ]; then
-  GDBSERVER=$GDBSERVER_BIN/$GDBSERVEREXEC
+  GDBSERVER=$GDBSERVER_BIN/$GDBSERVEREXECNAME
 else
   echo "TODO add checker for gdbserver"
-  GDBSERVER=$GDBSERVEREXEC
+  GDBSERVER=$GDBSERVEREXECNAME
 fi
 
 
@@ -260,7 +263,13 @@ fi
 
 if [ $ATTACH -eq $FALSE ]; then
   #create the server
-  SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${PGDB_BIN}/debug_server.sh $GDBSERVER ${PORT} &:" )
+  GDBSERVER_CMD="${PGDB_BIN}/debug_server.sh --server_bin $GDBSERVER"
+  if [ ! -z "$GDBSERVERPARAMS" ]; then
+    GDBSERVER_CMD+=" --server_params $GDBSERVERPARAMS"
+  fi
+  GDBSERVER_CMD+=" --port ${PORT}"
+  GDBSERVER_CMD+=" --run"
+  SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${GDBSERVER_CMD} &:" )
 
   step "Creation of the gdbserver"
   echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
