@@ -1,0 +1,18 @@
+# Since gdb does not work properly on Summit, we force to use cuda-gdb instead
+GDBEXECNAME=cuda-gdb
+GDBPARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+GDBSERVEREXECNAME=cuda-gdbserver
+GDBSERVERPARAMS="--cuda-use-lockfile=0"
+
+if [ -z $CUDADIR ]; then
+    echo "\$CUDADIR is not set. Load required modules"
+else
+#Set the path for gdbserver, gdb, and debug_server
+    GDBSERVER_BIN=$CUDADIR/bin
+    GDB_BIN=$CUDADIR/bin
+
+    PGDB_BIN=$HOME/repos/pgdb
+
+#TMUXSESSIONNAME=debug_session
+#PGDBWAITINGTIME=2
+fi

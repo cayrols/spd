@@ -62,9 +62,9 @@ function parse_param(){
 parse_param "$@"
 
 GDB_HOST=$(hostname) # Do we need the host name ?
-GDB_PORT=$(( DEFAULT_PORT + $OMPI_COMM_WORLD_RANK ))
+GDB_PORT=$(( DEFAULT_PORT + $PMI_RANK ))
 
-echo "GDB server for rank $OMPI_COMM_WORLD_RANK available on $GDB_HOST:$GDB_PORT"
+echo "GDB server for rank $PMI_RANK available on $GDB_HOST:$GDB_PORT"
 echo "exec $GDBSERVER_BIN $GDBSERVER_PARAMS :$GDB_PORT $CMD"
 exec $GDBSERVER_BIN $GDBSERVER_PARAMS :$GDB_PORT $CMD
 #echo "exec $GDB_SERVER :$GDB_PORT $*"

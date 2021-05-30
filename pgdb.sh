@@ -102,7 +102,7 @@ if [ -e $HOME/.pgdbrc ]; then
   echo "Load $HOME/.pgdbrc"
   source $HOME/.pgdbrc
 else
-  echo "No .gdbrc file found in $HOME"
+  echo "No .pgdbrc file found in $HOME"
 fi
 
 function parse_param(){
