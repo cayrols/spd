@@ -8,6 +8,13 @@ The right part will contain all ranks with all gdb, one gdb per rank.
 We note that on some machines the GNU gdb/gdbserver does not work properly when reading the symbols.
 We then switch to cuda-gdb/cuda-gdbserver.
 
+## Execution
+
+In substance, the script creates a tmux session called debug, focuses on it if other tmux
+sessions exist. If so, the user has to **detach** in order to resume.
+Then the scripts creates the gdbserver, waits a few seconds and then creates
+a pane per rank.
+
 # Install
 Clone the repo and move inside. No installation needed except the creation of a RC file.
 
@@ -20,6 +27,8 @@ Make a copy of one of them into your $HOME, and rename it .pgdbrc as follow:
 cp rc_files/pgdbrc_<machine_name> $HOME/.pgdbrc
 ```
 
+Then update it as needed.
+
 ## Environment
 We use the tmux software to display and manage the different gdb and the gdbserver.
 We recommand tmux/3.1b as we are mainly using it. It does not mean it does not work
@@ -28,14 +37,14 @@ with another version.
 ### Some tmux commands
 Tmux is using a prefix key, which is by default Ctrl-b.
 
-* To zoom/unzoom in a pane
-  ** `Ctrl-b, z`
-* To move between panes
-  ** `Ctrl-b, arrow`
-* Detach from a tmux session
-  ** `Ctrl-b d`
-* To kill all panes but the gdbserver pane
-  ** `Ctrl-b : kill-pane -a -t 0`
+* **detach** from a tmux session
+  * `Ctrl-b d`
+* **zoom/unzoom** in a pane
+  * `Ctrl-b z`
+* **move** between panes
+  * `Ctrl-b arrow`
+* **kill** all panes but the gdbserver pane
+  * `Ctrl-b : kill-pane -a -t 0`
 
 # Usage
 The classical way of using it is by considering the following standard way of execution:
@@ -57,7 +66,7 @@ This command line works as follow:
 ## Remarks
 Some remarks:
 * For now, we do not parse automatically the command line, so we need to provide the name of the executable.
-* the flag --run must be the last one relative to pgdb
+* The flag --run must be the last one relative to pgdb
 
 ## Additional case
 
