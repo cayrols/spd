@@ -18,6 +18,7 @@ ATTACH=$FALSE
 P=1
 Q=2
 PORT=60000
+RANKS=""
 
 #Pane creation var
 VERTICAL=v
@@ -41,7 +42,11 @@ function bold(){
 
 }
 
-
+function decho(){
+  if [ "$DEVMODE" -eq "$TRUE" ]; then
+    echo "$@"
+  fi 
+}
 
 function step(){
   echo -e "\n******** $1"
@@ -72,6 +77,8 @@ function chelp(){
   echo -e "\t\twith this port + MPI_rank."
   bold    "\t--gdbaddcmd 'cmd'"
   echo -e "\t\tAdd the 'cmd' commands to gdb. USE the gdb syntax -ex for each."
+  bold    "\t--ranks <int,...>"
+  echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
   bold    "\t--attach"
   echo -e "\t\tDo not create the gdbserver. Instead, just consider the server"
   echo -e "\t\tset and listening on the ports as described above."
@@ -141,10 +148,18 @@ function parse_param(){
         ATTACH=$TRUE
         shift
         ;;
+      --ranks)
+        shift
+        RANKS=$1
+        RANK_LIST=$( echo $RANKS | tr -s ',' ' ' )
+        decho "List of provided ranks: ${RANK_LIST[@]}"
+        shift
+        ;;
       --exec)
         shift
         EXEC=$1
         shift
+        decho "GIVEN $EXEC"
         ;;
       --run)
         shift
@@ -154,7 +169,6 @@ function parse_param(){
       --dev)#Intent to be removed
         shift
         DEVMODE=$TRUE
-        break
         ;;
       *)
         echo "$1 unknown argument" 1
@@ -172,13 +186,21 @@ function create_pane() {
   local SIZE=$3
   local HOST=$4
   local PORT=$5
+  local RUNGDB=$6
  #local GDBCMD="gdb -ex "\'"target remote ${HOST}:${PORT}"\'""
  #local gdb_params="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
-  local cmd="$GDB $GDBPARAMS -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
+  local cmd="bash"
+
+  decho "PANE:$PANE, ORIENT:$ORIENT, SIZE:$SIZE, HOST:$HOST, PORT:$PORT, RUNGDB:$RUNGDB"
+  
+  if [ $RUNGDB -eq $TRUE ]; then
+  cmd="$GDB $GDBPARAMS -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
  #local cmd="$GDB -ex "\'"target remote ${HOST}:${PORT}"\'" $GDBADDCMD --args $EXEC"
  #cmd="$GDB --cuda-use-lockfile=0 $EXEC"
  #cmd="gdb target remote ${HOST}:${PORT}"
  #cmd=$GDB
+  fi
+
 
   sleep 1
   echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
@@ -263,7 +285,13 @@ fi
 
 if [ $ATTACH -eq $FALSE ]; then
   #create the server
-  GDBSERVER_CMD="${PGDB_BIN}/debug_server.sh --server_bin $GDBSERVER"
+  GDBSERVER_CMD="${PGDB_BIN}/debug_server.sh"
+
+  # Select the ranks to debug
+  if [ "$RANKS" != "" ]; then
+    GDBSERVER_CMD+=" --debuggingRanks '$RANKS'"
+  fi
+  GDBSERVER_CMD+=" --server_bin $GDBSERVER"
   if [ ! -z "$GDBSERVERPARAMS" ]; then
     GDBSERVER_CMD+=" --server_params $GDBSERVERPARAMS"
   fi
@@ -286,12 +314,41 @@ fi
 # Create the env for the panes
 #================
 step "Creation of the pane"
-create_pane 0 $HORIZONTAL 70 ${HOSTS[0]} $PORT
+# TODO merge it witht the loop below ?
+pane_rank=0
+pane_exec_gdb=$TRUE
+
+if [ "$RANKS" != "" ]; then
+  pane_exec_gdb=$FALSE
+  for rank in ${RANK_LIST[@]}; do
+    if [ $rank -eq $pane_rank ]; then
+      pane_exec_gdb=$TRUE
+      break
+    fi
+  done
+fi
+create_pane $pane_rank $HORIZONTAL 70 ${HOSTS[0]} $PORT $pane_exec_gdb
 
 # Create the columns
 for q in $(seq 1 $((Q-1))); do
   HOST=${HOSTS[0]}
-  create_pane $((q)) $HORIZONTAL $((100 - 100 / (Q - q + 1) )) $HOST $((PORT + q))
+  col_pane_id=$q
+  pane_size=$((100 - 100 / (Q - q + 1) ))
+  pane_rank=$q
+  pane_port=$((PORT + pane_rank))
+  pane_exec_gdb=$TRUE
+
+  if [ "$RANKS" != "" ]; then
+    pane_exec_gdb=$FALSE
+    for rank in ${RANK_LIST[@]}; do
+      if [ $rank -eq $pane_rank ]; then
+        pane_exec_gdb=$TRUE
+        break
+      fi
+    done
+  fi
+  create_pane $col_pane_id $HORIZONTAL $pane_size \
+    $HOST $pane_port $pane_exec_gdb
 done
 
 # Creation of the panes as a grid PxQ, column by column
@@ -302,7 +359,22 @@ for q in $(seq 1 $Q); do
 
   for p in $(seq 2 $((P - 0))); do
     HOST=${HOSTS[$((p - 1))]}
-    create_pane $col_pane_id $VERTICAL $((100 / (P - p + 2) )) $HOST $((PORT + (p - 1) * Q + q - 1))
+    pane_size=$((100 / (P - p + 2) ))
+    pane_rank=$(( (p - 1) * Q + q - 1 ))
+    pane_port=$((PORT + $pane_rank))
+    pane_exec_gdb=$TRUE
+
+    if [ "$RANKS" != "" ]; then
+      pane_exec_gdb=$FALSE
+      for rank in ${RANK_LIST[@]}; do
+        if [ $rank -eq $pane_rank ]; then
+          pane_exec_gdb=$TRUE
+          break
+        fi
+      done
+    fi
+    create_pane $col_pane_id $VERTICAL $pane_size \
+      $HOST $pane_port $pane_exec_gdb
   done
 done
 
