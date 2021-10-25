@@ -1,0 +1,14 @@
+# Since gdb does not work properly on Summit, we force to use cuda-gdb instead
+GDBEXECNAME=cuda-gdb
+GDBPARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+GDBSERVEREXECNAME=cuda-gdbserver
+GDBSERVERPARAMS="--cuda-use-lockfile=0"
+
+#Set the path for gdbserver, gdb, and debug_server
+GDBSERVER_BIN=${CUDA_ROOT}/bin
+GDB_BIN=${CUDA_ROOT}/bin
+
+PGDB_BIN=/home/scayrols/scripts/pgdb
+
+#TMUXSESSIONNAME=debug_session
+#PGDBWAITINGTIME=2
