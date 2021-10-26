@@ -298,33 +298,31 @@ function create_grid(){
   colAncestor=0 # XXX assuming the gdbserver pane is 0
   rowAncestor=0
   for p in $(seq 1 $nrow ); do
-    # Check whether the cu_rank is involved in the debugging
-    cur_rank=$(( (p - 1) * ncol ))
-    is_active_rank $cur_rank ${ranks[@]}
-    if [ $active_rank -eq $TRUE ]; then
-      rowCounter=$((rowCounter + 1))
-      nval=$((nval + 1))
-
-      lpaneId+=( $nval )
-      lpaneRanks+=( $cur_rank )
-      lpaneAncestorId+=( $colAncestor )
-      
-      colAncestor=$rowCounter
-      rowAncestor=$nval
-    fi
-
-    for q in $(seq 1 $((ncol - 1)) ); do
-      # Check whether the cu_rank is involved in the debugging
+    rowLeader_found=$FALSE
+    for q in $(seq 0 $((ncol - 1)) ); do
       cur_rank=$(( (p - 1) * ncol + q ))
+      
+      # Check whether the cu_rank is involved in the debugging
       is_active_rank $cur_rank ${ranks[@]}
+
       if [ $active_rank -eq $TRUE ]; then
+        if [ $rowLeader_found -eq $FALSE ]; then
+          rowCounter=$((rowCounter + 1))
+          ancestor=$colAncestor
+        else
+          ancestor=$rowAncestor
+        fi
         nval=$((nval + 1))
-        
+
         lpaneId+=( $nval )
         lpaneRanks+=( $cur_rank )
-        lpaneAncestorId+=( $rowAncestor )
-
-        rowAncestor=$((rowAncestor + 1))
+        lpaneAncestorId+=( $ancestor )
+        
+        rowAncestor=$nval
+        if [ $rowLeader_found -eq $FALSE ]; then
+          colAncestor=$rowCounter
+          rowLeader_found=$TRUE
+        fi
       fi
     done
     lrowPtr+=( $nval )
