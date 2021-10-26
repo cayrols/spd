@@ -19,7 +19,7 @@ P=1
 Q=2
 PORT=60000
 RANKS=""
-#USEGRID=$FALSE
+#REARRANGEGRID=$FALSE
 
 #Pane creation var
 VERTICAL=v
@@ -149,8 +149,8 @@ function parse_param(){
         ATTACH=$TRUE
         shift
         ;;
-     #--useGrid) # TOOD but not implemented yet
-     #  USEGRID=$TRUE
+     #--rearrangeGrid) # TODO but not implemented yet
+     #  REARRANGEGRID=$TRUE
      #  shift
      #  ;;
       --ranks)
@@ -223,37 +223,44 @@ function create_regular_grid(){
   local lrowPtr=()
   local lpaneId=()
   local lpaneAncestorId=()
+  local lpaneRanks=()
   local nval=0
 
   lrowPtr+=( 0 )
-  ancestor=0
+  rowAncestor=0
+  colAncestor=0
   for p in $(seq 1 $nrow ); do
-    lpaneId+=( $p )
-    lpaneAncestorId+=( $ancestor )
-    # Shift it to be in the correct range when the panes are created
-   #ancestor=$(( (p - 1) * ncol ))
-    ancestor=$(( (p - 1) * ncol + 1 ))
+    rank=$nval
     nval=$((nval + 1))
-    for q in $(seq 1 $((ncol - 1)) ); do
-      cur_pane_id=$((nrow + q + (p  - 1 ) * ncol))
-      
-      lpaneId+=( $cur_pane_id )
-      lpaneAncestorId+=( $ancestor )
 
-      ancestor=$((ancestor + 1))
+    lpaneId+=( $nval )
+    lpaneRanks+=( $rank )
+    lpaneAncestorId+=( $colAncestor )
+
+    colAncestor=$p
+    rowAncestor=$nval
+
+    for q in $(seq 1 $((ncol - 1)) ); do
+      rank=$nval
       nval=$((nval + 1))
+
+      lpaneId+=( $nval )
+      lpaneRanks+=( $rank )
+      lpaneAncestorId+=( $rowAncestor )
+
+      rowAncestor=$((rowAncestor + 1))
     done
-    # Restore the ancestor since it is based on the order of creation of the pane
-    ancestor=$p
     lrowPtr+=( $nval )
   done
   decho "rowPtr         ${lrowPtr[@]}"
   decho "paneId         ${lpaneId[@]}"
+  decho "paneRanks      ${lpaneRanks[@]}"
   decho "paneAncestorId ${lpaneAncestorId[@]}"
 
   # Return arrays
   rowPtr=( ${lrowPtr[@]} )
   paneId=( ${lpaneId[@]} )
+  paneRanks=( ${lpaneRanks[@]} )
   paneAncestorId=( ${lpaneAncestorId[@]} )
 }
 
@@ -281,6 +288,7 @@ function create_grid(){
   local lrowPtr=()
   local lpaneId=()
   local lpaneAncestorId=()
+  local lpaneRanks=()
   local nval=0
   local size=$(( nrow * ncol ))
   local cur_rank=0
@@ -288,17 +296,19 @@ function create_grid(){
   lrowPtr+=( 0 )
   rowCounter=0
   colAncestor=0 # XXX assuming the gdbserver pane is 0
+  rowAncestor=0
   for p in $(seq 1 $nrow ); do
     # Check whether the cu_rank is involved in the debugging
     cur_rank=$(( (p - 1) * ncol ))
     is_active_rank $cur_rank ${ranks[@]}
     if [ $active_rank -eq $TRUE ]; then
-      lpaneId+=( $p )
-      lpaneAncestorId+=( $colAncestor )
-      
       rowCounter=$((rowCounter + 1))
       nval=$((nval + 1))
 
+      lpaneId+=( $nval )
+      lpaneRanks+=( $cur_rank )
+      lpaneAncestorId+=( $colAncestor )
+      
       colAncestor=$rowCounter
       rowAncestor=$nval
     fi
@@ -308,24 +318,26 @@ function create_grid(){
       cur_rank=$(( (p - 1) * ncol + q ))
       is_active_rank $cur_rank ${ranks[@]}
       if [ $active_rank -eq $TRUE ]; then
-        cur_pane_id=$((nrow + q + (p  - 1 ) * ncol))
+        nval=$((nval + 1))
         
-        lpaneId+=( $cur_pane_id )
+        lpaneId+=( $nval )
+        lpaneRanks+=( $cur_rank )
         lpaneAncestorId+=( $rowAncestor )
 
         rowAncestor=$((rowAncestor + 1))
-        nval=$((nval + 1))
       fi
     done
     lrowPtr+=( $nval )
   done
   decho "rowPtr         ${lrowPtr[@]}"
   decho "paneId         ${lpaneId[@]}"
+  decho "paneRanks      ${lpaneRanks[@]}"
   decho "paneAncestorId ${lpaneAncestorId[@]}"
 
   # Return arrays
   rowPtr=( ${lrowPtr[@]} )
   paneId=( ${lpaneId[@]} )
+  paneRanks=( ${lpaneRanks[@]} )
   paneAncestorId=( ${lpaneAncestorId[@]} )
 }
 
@@ -427,6 +439,7 @@ if [ $ATTACH -eq $FALSE ]; then
   sleep $PGDBWAITINGTIME
 fi
 
+# Generate the grid 
 if [ "$RANKS" != "" ]; then
   create_grid $P $Q ${RANK_LIST[@]}
   nactiveRow=0
@@ -461,11 +474,12 @@ for p in $(seq 0 $((P - 1))); do
   HOST=${HOSTS[$p]}
   HOST=${HOSTS[0]}
   if [ $nrowCreated -gt 0 ]; then
-    pane_size=$((100 - 100 / (nactiveRow - p + 1) ))
+    pane_size=$((100 - 100 / (nactiveRow - nrowCreated + 1) ))
     orient=$VERTICAL
   fi
-  pane_rank=${rowPtr[$p]}
-  col_pane_id=${paneAncestorId[$pane_rank]}
+  pane_idx=${rowPtr[$p]}
+  pane_rank=${paneRanks[$pane_idx]}
+  col_pane_id=${paneAncestorId[$pane_idx]}
   pane_port=$((PORT + pane_rank))
   pane_exec_gdb=$TRUE
 
@@ -483,15 +497,15 @@ for p in $(seq 0 $((P - 1))); do
   if [ $nlrank -eq 0 ]; then 
     continue
   fi
-  decho "Add $((nlrank - 1)) for row $p"
+  decho "Add $nlrank for row $p"
 
   for q in $(seq 1 $((nlrank - 1))); do
     HOST=${HOSTS[$p]}
     HOST=${HOSTS[0]}
-    pane_size=$((100 / (nlrank - q + 2) ))
     pane_size=$((100 - 100 / (nlrank - q + 1) ))
-    pane_rank=$(( ${rowPtr[$p]} + q ))
-    col_pane_id=${paneAncestorId[$pane_rank]}
+    pane_idx=$(( ${rowPtr[$p]} + q ))
+    pane_rank=${paneRanks[$pane_idx]}
+    col_pane_id=${paneAncestorId[$pane_idx]}
     pane_port=$((PORT + $pane_rank))
     pane_exec_gdb=$TRUE
 
