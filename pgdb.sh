@@ -230,25 +230,33 @@ function create_regular_grid(){
   rowAncestor=0
   colAncestor=0
   for p in $(seq 1 $nrow ); do
-    rank=$nval
-    nval=$((nval + 1))
+    isRowLeader=$TRUE
+   #rank=$nval
+   #nval=$((nval + 1))
 
-    lpaneId+=( $nval )
-    lpaneRanks+=( $rank )
-    lpaneAncestorId+=( $colAncestor )
+   #lpaneId+=( $nval )
+   #lpaneRanks+=( $rank )
+   #lpaneAncestorId+=( $colAncestor )
 
-    colAncestor=$p
-    rowAncestor=$nval
+   #colAncestor=$p
+   #rowAncestor=$nval
 
-    for q in $(seq 1 $((ncol - 1)) ); do
-      rank=$nval
+    for q in $(seq 0 $((ncol - 1)) ); do
+      if [ $isRowLeader -eq $TRUE ]; then
+        ancestor=$colAncestor
+        colAncestor=$p
+        isRowLeader=$FALSE
+      else
+        ancestor=$rowAncestor
+      fi
+      cur_rank=$(( (p - 1) * ncol + q ))
       nval=$((nval + 1))
 
       lpaneId+=( $nval )
-      lpaneRanks+=( $rank )
-      lpaneAncestorId+=( $rowAncestor )
+      lpaneRanks+=( $cur_rank )
+      lpaneAncestorId+=( $ancestor )
 
-      rowAncestor=$((rowAncestor + 1))
+      rowAncestor=$nval
     done
     lrowPtr+=( $nval )
   done
@@ -298,7 +306,7 @@ function create_grid(){
   colAncestor=0 # XXX assuming the gdbserver pane is 0
   rowAncestor=0
   for p in $(seq 1 $nrow ); do
-    rowLeader_found=$FALSE
+    isRowLeader=$TRUE
     for q in $(seq 0 $((ncol - 1)) ); do
       cur_rank=$(( (p - 1) * ncol + q ))
       
@@ -306,9 +314,11 @@ function create_grid(){
       is_active_rank $cur_rank ${ranks[@]}
 
       if [ $active_rank -eq $TRUE ]; then
-        if [ $rowLeader_found -eq $FALSE ]; then
+        if [ $isRowLeader -eq $TRUE ]; then
           rowCounter=$((rowCounter + 1))
           ancestor=$colAncestor
+          colAncestor=$rowCounter
+          isRowLeader=$FALSE
         else
           ancestor=$rowAncestor
         fi
@@ -319,10 +329,6 @@ function create_grid(){
         lpaneAncestorId+=( $ancestor )
         
         rowAncestor=$nval
-        if [ $rowLeader_found -eq $FALSE ]; then
-          colAncestor=$rowCounter
-          rowLeader_found=$TRUE
-        fi
       fi
     done
     lrowPtr+=( $nval )
