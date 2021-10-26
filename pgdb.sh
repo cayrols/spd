@@ -20,6 +20,7 @@ Q=2
 PORT=60000
 RANKS=""
 #REARRANGEGRID=$FALSE
+PAGING=$FALSE
 
 #Pane creation var
 VERTICAL=v
@@ -66,25 +67,37 @@ function chelp(){
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
+  
   bold    "DESCRIPTION"
   echo -e "\tNone"
+  
   bold    "OPTIONS"
   bold    "\t-p <int: DEFAULT $P>"
   echo -e "\t\tThe number of hosts"
+  
   bold    "\t-q <int: DEFAULT $Q>"
   echo -e "\t\tThe number of MPI processes per host"
+  
   bold    "\t--port <int: DEFAULT $PORT>"
   echo -e "\t\tThe port used by the gdbserver. Each MPI process is associated"
   echo -e "\t\twith this port + MPI_rank."
+  
   bold    "\t--gdbaddcmd 'cmd'"
   echo -e "\t\tAdd the 'cmd' commands to gdb. USE the gdb syntax -ex for each."
+  
   bold    "\t--ranks <int,...>"
   echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
+  
   bold    "\t--attach"
   echo -e "\t\tDo not create the gdbserver. Instead, just consider the server"
   echo -e "\t\tset and listening on the ports as described above."
+  
   bold    "\t--cudagdb"
   echo -e "\t\tUse cuda-gdb and cuda-gdbserver instead of gdb and gdbserver."
+  
+  bold    "\t--paging"
+  echo -e "\t\tCreate paging window."
+
   bold    "REMARKS"
   echo -e "\t\tOn some plateformes, the gdb env does not work properly."
   echo -e "\t\tTherefore, if needed, export the GDB_BIN and GDBSERVER_BIN."
@@ -149,6 +162,10 @@ function parse_param(){
         ATTACH=$TRUE
         shift
         ;;
+      --paging)
+        PAGING=$TRUE
+        shift
+        ;;
      #--rearrangeGrid) # TODO but not implemented yet
      #  REARRANGEGRID=$TRUE
      #  shift
@@ -183,6 +200,29 @@ function parse_param(){
   done
 }
 
+function create_window(){
+  local tmuxSession=$1
+  local windowId=$2
+  shift 2
+  local windowName=( $@ )
+
+  decho "Creation of window id:$windowId named ${windowName[@]}"\
+    " in Session $tmuxSession"
+  if [ $DEVMODE -eq $FALSE ]; then
+    $TMUXCMD new-window -t ${tmuxSession}:$windowId -n "${windowName[@]}"
+  fi
+}
+
+function select_window(){
+  local tmuxSession=$1
+  local windowId=$2
+
+  decho "Selection of window id:$windowId in Session $tmuxSession"
+  if [ $DEVMODE -eq $FALSE ]; then
+    $TMUXCMD select-window -t ${tmuxSession}:$windowId
+  fi
+}
+
 #create the panes
 # NOTE: Use the bash global vars GDBADDCMD and EXEC
 function create_pane() {
@@ -208,7 +248,7 @@ function create_pane() {
 
 
   sleep 1
-  echo "tmux splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
+  echo "$TMUXCMD splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   if [ $DEVMODE -eq $FALSE ]; then
     $TMUXCMD splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
    #tmux send-keys -t $PANE "set sysroot target:/" Enter
@@ -220,6 +260,7 @@ function create_pane() {
 function create_regular_grid(){
   local nrow=$1
   local ncol=$2
+
   local lrowPtr=()
   local lpaneId=()
   local lpaneAncestorId=()
@@ -290,9 +331,9 @@ function is_active_rank(){
 function create_grid(){
   local nrow=$1
   local ncol=$2
-  shift
-  shift
+  shift 2
   local ranks=( $@ )
+
   local lrowPtr=()
   local lpaneId=()
   local lpaneAncestorId=()
@@ -343,6 +384,109 @@ function create_grid(){
   paneId=( ${lpaneId[@]} )
   paneRanks=( ${lpaneRanks[@]} )
   paneAncestorId=( ${lpaneAncestorId[@]} )
+}
+
+function display_pane(){
+  local tmuxSession=$1
+  local windowId=$2
+  local rowOffset=$3
+  local paneOffset=$4
+  shift 4
+  local row_idx=( $@ )
+
+  # Select the window
+  select_window $tmuxSession $windowId
+
+  ## Create the rows first
+  local nrowCreated=0
+  local nlpaneCreated=0
+  local pane_size=70
+  local orient=$HORIZONTAL
+ #for p in $(seq 0 $((P - 1))); do
+  for p in ${row_idx[@]}; do
+    nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+    if [ $nlrank -eq 0 ]; then 
+      continue
+    fi
+
+    HOST=${HOSTS[$p]}
+    HOST=${HOSTS[0]}
+    if [ $nrowCreated -gt 0 ]; then
+      pane_size=$((100 - 100 / (nactiveRow - nrowCreated + 1) ))
+      orient=$VERTICAL
+    fi
+    pane_idx=${rowPtr[$p]}
+    pane_rank=${paneRanks[$pane_idx]}
+    col_pane_id=$(( ${paneAncestorId[$pane_idx]} - $rowOffset ))
+    pane_port=$((PORT + pane_rank))
+    pane_exec_gdb=$TRUE
+
+    create_pane $col_pane_id $orient $pane_size \
+      $HOST $pane_port $pane_exec_gdb
+
+    nrowCreated=$(( nrowCreated + 1 ))
+  done
+
+  decho "Creation of $nrowCreated rows completed for window $windowId"
+
+  # Creation of the panes as a grid PxQ, row by row
+ #for p in $(seq 0 $((P - 1))); do
+  for p in ${row_idx[@]}; do
+    nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+    if [ $nlrank -eq 0 ]; then 
+      continue
+    fi
+    decho "Add $nlrank for row $p"
+    nlpaneCreated=$(( nlpaneCreated + nlrank ))
+
+    for q in $(seq 1 $((nlrank - 1))); do
+     #if [ $q -eq 1 ]; then
+     #  offset=$rowOffset
+     #else
+        offset=$paneOffset
+     #fi
+      HOST=${HOSTS[$p]}
+      HOST=${HOSTS[0]}
+      pane_size=$((100 - 100 / (nlrank - q + 1) ))
+      pane_idx=$(( ${rowPtr[$p]} + q ))
+      pane_rank=${paneRanks[$pane_idx]}
+      col_pane_id=$(( ${paneAncestorId[$pane_idx]} - $offset ))
+      decho "col_pane_id=${paneAncestorId[$pane_idx]} - $offset "
+      pane_port=$((PORT + $pane_rank))
+      pane_exec_gdb=$TRUE
+
+      create_pane $col_pane_id $HORIZONTAL $pane_size \
+        $HOST $pane_port $pane_exec_gdb
+    done
+  done
+
+  cur_npaneDisplayed=$nlpaneCreated
+  decho "Returned cur_npaneDisplayed:$cur_npaneDisplayed"
+}
+
+function get_rows_to_display(){
+  local nrow=$1
+  local nrowStart=$2
+  local pageMaxNrow=$3
+  shift 3
+  local lrowPtr=( $@ )
+
+  local nlactiveRow=0
+  local lrowToDisplay=()
+
+  for i in $(seq $nrowStart $((nrow - 1)) ); do
+    nlrank=$(( ${rowPtr[$((i + 1))]} - ${rowPtr[$i]} ))
+    decho "Row $i: $nlrank elements"
+    if [ $nlrank -gt 0 ]; then
+      nlactiveRow=$(( nlactiveRow + 1 ))
+      lrowToDisplay+=( $i )
+      if [ $nlactiveRow -eq $pageMaxNrow ]; then
+        break
+      fi
+    fi
+  done
+
+  rowToDisplay=( ${lrowToDisplay[@]} )
 }
 
 ################################################################################
@@ -406,7 +550,7 @@ tmuxExist=$?
 echo "#sessions: $tmuxNsession"
 if [ $tmuxExist -eq 1 ]; then
   echo "Creation of the tmux session named '$TMUXSESSIONNAME'"
-  $TMUXCMD new -s $TMUXSESSIONNAME
+  $TMUXCMD new -s $TMUXSESSIONNAME -d -x "$(tput cols)" -y "$(tput lines)"
 else
   echo "Tmux session named '$TMUXSESSIONNAME' already exists"
   #Ensure this session is the current one by attaching to it if more than one
@@ -433,7 +577,7 @@ if [ $ATTACH -eq $FALSE ]; then
   SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${GDBSERVER_CMD} &:" )
 
   step "Creation of the gdbserver"
-  echo "tmux send-keys -t 0 "$SERVERCMD" Enter"
+  echo "$TMUXCMD send-keys -t 0 "$SERVERCMD" Enter"
   if [ $DEVMODE -eq $FALSE ]; then
     $TMUXCMD send-keys -t 0 "$SERVERCMD" Enter
   fi
@@ -446,18 +590,8 @@ fi
 # Generate the grid 
 if [ "$RANKS" != "" ]; then
   create_grid $P $Q ${RANK_LIST[@]}
-  nactiveRow=0
-  for i in $(seq 0 $((P - 1)) ); do
-    nlrank=$(( ${rowPtr[$((i + 1))]} - ${rowPtr[$i]} ))
-    decho "Row $i: $nlrank elements"
-    if [ $nlrank -gt 0 ]; then
-      nactiveRow=$(( nactiveRow + 1 ))
-    fi
-  done
-  decho "nactiveRow: $nactiveRow"
 else
   create_regular_grid $P $Q
-  nactiveRow=$P
 fi
 
 #================
@@ -465,121 +599,50 @@ fi
 #================
 step "Creation of the pane"
 
-## Create the rows
-nrowCreated=0
-pane_size=70
-orient=$HORIZONTAL
-for p in $(seq 0 $((P - 1))); do
-  nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
-  if [ $nlrank -eq 0 ]; then 
-    continue
+nrowPerPage=2
+nrowDisplayed=0
+npaneDisplayed=0
+rowToDisplay=()
+# Count the number of rows to display
+nactiveRow=0
+for i in $(seq 0 $((P - 1)) ); do
+  nlrank=$(( ${rowPtr[$((i + 1))]} - ${rowPtr[$i]} ))
+  decho "Row $i: $nlrank elements"
+  if [ $nlrank -gt 0 ]; then
+    nactiveRow=$(( nactiveRow + 1 ))
+   #rowToDisplay+=( $i )
   fi
-
-  HOST=${HOSTS[$p]}
-  HOST=${HOSTS[0]}
-  if [ $nrowCreated -gt 0 ]; then
-    pane_size=$((100 - 100 / (nactiveRow - nrowCreated + 1) ))
-    orient=$VERTICAL
-  fi
-  pane_idx=${rowPtr[$p]}
-  pane_rank=${paneRanks[$pane_idx]}
-  col_pane_id=${paneAncestorId[$pane_idx]}
-  pane_port=$((PORT + pane_rank))
-  pane_exec_gdb=$TRUE
-
-  create_pane $col_pane_id $orient $pane_size \
-    $HOST $pane_port $pane_exec_gdb
-
-  nrowCreated=$(( nrowCreated + 1 ))
 done
 
-decho "Creation of $nrowCreated rows completed"
+if [ $PAGING -eq $TRUE ]; then
+  nrowToDisplay=$nrowPerPage
+  PYTHONCMD="from math import ceil; print( ceil(${nactiveRow}/$nrowPerPage) )"
+  nwindows=$( python3 -c "$PYTHONCMD" )
+  decho "nwindows:$nwindows"
 
-# Creation of the panes as a grid PxQ, column by column
-for p in $(seq 0 $((P - 1))); do
-  nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
-  if [ $nlrank -eq 0 ]; then 
-    continue
+ #get_rows_to_display $P $nrowDisplayed $nrowPerPage ${rowPtr[@]}
+else
+  nwindows=1
+  nrowToDisplay=$P
+fi
+
+get_rows_to_display $P $nrowDisplayed $nrowToDisplay ${rowPtr[@]}
+
+for windowId in $(seq 0 $((nwindows - 1)) ); do 
+  if [ $windowId -gt 0 ]; then
+    get_rows_to_display $P $nrowDisplayed $nrowToDisplay ${rowPtr[@]}
+
+    windowName="Range_${rowToDisplay[0]}_${rowToDisplay[$(( ${#rowToDisplay[@]} - 1))]}"
+    create_window $TMUXSESSIONNAME $windowId $windowName
   fi
-  decho "Add $nlrank for row $p"
+  nactiveRow=${#rowToDisplay[@]}
+  decho "[Page:$windowId] nactiveRow: $nactiveRow"
 
-  for q in $(seq 1 $((nlrank - 1))); do
-    HOST=${HOSTS[$p]}
-    HOST=${HOSTS[0]}
-    pane_size=$((100 - 100 / (nlrank - q + 1) ))
-    pane_idx=$(( ${rowPtr[$p]} + q ))
-    pane_rank=${paneRanks[$pane_idx]}
-    col_pane_id=${paneAncestorId[$pane_idx]}
-    pane_port=$((PORT + $pane_rank))
-    pane_exec_gdb=$TRUE
+  decho "Rows to display: ${rowToDisplay[@]}"
+  display_pane $TMUXSESSIONNAME $windowId $nrowDisplayed $npaneDisplayed ${rowToDisplay[@]}
 
-    create_pane $col_pane_id $HORIZONTAL $pane_size \
-      $HOST $pane_port $pane_exec_gdb
-  done
+  nrowDisplayed=$(( nrowDisplayed + ${#rowToDisplay[@]} ))
+  npaneDisplayed=$(( npaneDisplayed + cur_npaneDisplayed ))
 done
-
-## TODO merge it with the loop below ?
-#pane_rank=0
-#pane_exec_gdb=$TRUE
-#
-#if [ "$RANKS" != "" ]; then
-#  pane_exec_gdb=$FALSE
-#  for rank in ${RANK_LIST[@]}; do
-#    if [ $rank -eq $pane_rank ]; then
-#      pane_exec_gdb=$TRUE
-#      break
-#    fi
-#  done
-#fi
-#create_pane $pane_rank $HORIZONTAL 70 ${HOSTS[0]} $PORT $pane_exec_gdb
-#
-## Create the columns
-#for q in $(seq 1 $((Q-1))); do
-#  HOST=${HOSTS[0]}
-#  col_pane_id=$q
-#  pane_size=$((100 - 100 / (Q - q + 1) ))
-#  pane_rank=$q
-#  pane_port=$((PORT + pane_rank))
-#  pane_exec_gdb=$TRUE
-#
-#  if [ "$RANKS" != "" ]; then
-#    pane_exec_gdb=$FALSE
-#    for rank in ${RANK_LIST[@]}; do
-#      if [ $rank -eq $pane_rank ]; then
-#        pane_exec_gdb=$TRUE
-#        break
-#      fi
-#    done
-#  fi
-#  create_pane $col_pane_id $HORIZONTAL $pane_size \
-#    $HOST $pane_port $pane_exec_gdb
-#done
-#
-## Creation of the panes as a grid PxQ, column by column
-#for q in $(seq 1 $Q); do
-#  echo "Q = $q"
-#  col_pane_id=$(( (q - 1) * $P + 1))
-#  echo "Col_pane_id $col_pane_id"
-#
-#  for p in $(seq 2 $((P - 0))); do
-#    HOST=${HOSTS[$((p - 1))]}
-#    pane_size=$((100 / (P - p + 2) ))
-#    pane_rank=$(( (p - 1) * Q + q - 1 ))
-#    pane_port=$((PORT + $pane_rank))
-#    pane_exec_gdb=$TRUE
-#
-#    if [ "$RANKS" != "" ]; then
-#      pane_exec_gdb=$FALSE
-#      for rank in ${RANK_LIST[@]}; do
-#        if [ $rank -eq $pane_rank ]; then
-#          pane_exec_gdb=$TRUE
-#          break
-#        fi
-#      done
-#    fi
-#    create_pane $col_pane_id $VERTICAL $pane_size \
-#      $HOST $pane_port $pane_exec_gdb
-#  done
-#done
 
 echo -e "\nAttach to the session $TMUXSESSIONNAME:\t$TMUXCMD attach -t $TMUXSESSIONNAME"
