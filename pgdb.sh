@@ -286,16 +286,21 @@ function create_grid(){
   local cur_rank=0
 
   lrowPtr+=( 0 )
-  ancestor=0 # XXX assuming the gdbserver pane is 0
+  rowCounter=0
+  colAncestor=0 # XXX assuming the gdbserver pane is 0
   for p in $(seq 1 $nrow ); do
     # Check whether the cu_rank is involved in the debugging
     cur_rank=$(( (p - 1) * ncol ))
     is_active_rank $cur_rank ${ranks[@]}
     if [ $active_rank -eq $TRUE ]; then
       lpaneId+=( $p )
-      lpaneAncestorId+=( $((p - 1)) )
-      ancestor=$p
+      lpaneAncestorId+=( $colAncestor )
+      
+      rowCounter=$((rowCounter + 1))
       nval=$((nval + 1))
+
+      colAncestor=$rowCounter
+      rowAncestor=$nval
     fi
 
     for q in $(seq 1 $((ncol - 1)) ); do
@@ -306,9 +311,9 @@ function create_grid(){
         cur_pane_id=$((nrow + q + (p  - 1 ) * ncol))
         
         lpaneId+=( $cur_pane_id )
-        lpaneAncestorId+=( $ancestor )
+        lpaneAncestorId+=( $rowAncestor )
 
-        ancestor=$cur_pane_id
+        rowAncestor=$((rowAncestor + 1))
         nval=$((nval + 1))
       fi
     done
@@ -426,7 +431,8 @@ if [ "$RANKS" != "" ]; then
   create_grid $P $Q ${RANK_LIST[@]}
   nactiveRow=0
   for i in $(seq 0 $((P - 1)) ); do
-    nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+    nlrank=$(( ${rowPtr[$((i + 1))]} - ${rowPtr[$i]} ))
+    decho "Row $i: $nlrank elements"
     if [ $nlrank -gt 0 ]; then
       nactiveRow=$(( nactiveRow + 1 ))
     fi
@@ -469,7 +475,7 @@ for p in $(seq 0 $((P - 1))); do
   nrowCreated=$(( nrowCreated + 1 ))
 done
 
-decho "Creation of $nrowCreated completed"
+decho "Creation of $nrowCreated rows completed"
 
 # Creation of the panes as a grid PxQ, column by column
 for p in $(seq 0 $((P - 1))); do
