@@ -19,6 +19,7 @@ P=1
 Q=2
 PORT=60000
 RANKS=""
+#USEGRID=$FALSE
 
 #Pane creation var
 VERTICAL=v
@@ -148,6 +149,10 @@ function parse_param(){
         ATTACH=$TRUE
         shift
         ;;
+     #--useGrid) # TOOD but not implemented yet
+     #  USEGRID=$TRUE
+     #  shift
+     #  ;;
       --ranks)
         shift
         RANKS=$1
@@ -210,6 +215,113 @@ function create_pane() {
    #tmux send-keys -t $PANE "target remote ${HOST}:${PORT}" Enter
   fi
 
+}
+
+function create_regular_grid(){
+  local nrow=$1
+  local ncol=$2
+  local lrowPtr=()
+  local lpaneId=()
+  local lpaneAncestorId=()
+  local nval=0
+
+  lrowPtr+=( 0 )
+  ancestor=0
+  for p in $(seq 1 $nrow ); do
+    lpaneId+=( $p )
+    lpaneAncestorId+=( $ancestor )
+    # Shift it to be in the correct range when the panes are created
+   #ancestor=$(( (p - 1) * ncol ))
+    ancestor=$(( (p - 1) * ncol + 1 ))
+    nval=$((nval + 1))
+    for q in $(seq 1 $((ncol - 1)) ); do
+      cur_pane_id=$((nrow + q + (p  - 1 ) * ncol))
+      
+      lpaneId+=( $cur_pane_id )
+      lpaneAncestorId+=( $ancestor )
+
+      ancestor=$((ancestor + 1))
+      nval=$((nval + 1))
+    done
+    # Restore the ancestor since it is based on the order of creation of the pane
+    ancestor=$p
+    lrowPtr+=( $nval )
+  done
+  decho "rowPtr         ${lrowPtr[@]}"
+  decho "paneId         ${lpaneId[@]}"
+  decho "paneAncestorId ${lpaneAncestorId[@]}"
+
+  # Return arrays
+  rowPtr=( ${lrowPtr[@]} )
+  paneId=( ${lpaneId[@]} )
+  paneAncestorId=( ${lpaneAncestorId[@]} )
+}
+
+function is_active_rank(){
+  local rank=$1
+  shift
+  local ranks=$@
+
+  active_rank=$FALSE
+  for lrank in ${ranks[@]}; do
+    if [ $lrank -eq $rank ]; then
+      active_rank=$TRUE
+      decho "Rank $rank found in ${ranks[@]}"
+      break
+    fi
+  done
+}
+
+function create_grid(){
+  local nrow=$1
+  local ncol=$2
+  shift
+  shift
+  local ranks=( $@ )
+  local lrowPtr=()
+  local lpaneId=()
+  local lpaneAncestorId=()
+  local nval=0
+  local size=$(( nrow * ncol ))
+  local cur_rank=0
+
+  lrowPtr+=( 0 )
+  ancestor=0 # XXX assuming the gdbserver pane is 0
+  for p in $(seq 1 $nrow ); do
+    # Check whether the cu_rank is involved in the debugging
+    cur_rank=$(( (p - 1) * ncol ))
+    is_active_rank $cur_rank ${ranks[@]}
+    if [ $active_rank -eq $TRUE ]; then
+      lpaneId+=( $p )
+      lpaneAncestorId+=( $((p - 1)) )
+      ancestor=$p
+      nval=$((nval + 1))
+    fi
+
+    for q in $(seq 1 $((ncol - 1)) ); do
+      # Check whether the cu_rank is involved in the debugging
+      cur_rank=$(( (p - 1) * ncol + q ))
+      is_active_rank $cur_rank ${ranks[@]}
+      if [ $active_rank -eq $TRUE ]; then
+        cur_pane_id=$((nrow + q + (p  - 1 ) * ncol))
+        
+        lpaneId+=( $cur_pane_id )
+        lpaneAncestorId+=( $ancestor )
+
+        ancestor=$cur_pane_id
+        nval=$((nval + 1))
+      fi
+    done
+    lrowPtr+=( $nval )
+  done
+  decho "rowPtr         ${lrowPtr[@]}"
+  decho "paneId         ${lpaneId[@]}"
+  decho "paneAncestorId ${lpaneAncestorId[@]}"
+
+  # Return arrays
+  rowPtr=( ${lrowPtr[@]} )
+  paneId=( ${lpaneId[@]} )
+  paneAncestorId=( ${lpaneAncestorId[@]} )
 }
 
 ################################################################################
@@ -310,72 +422,140 @@ if [ $ATTACH -eq $FALSE ]; then
   sleep $PGDBWAITINGTIME
 fi
 
+if [ "$RANKS" != "" ]; then
+  create_grid $P $Q ${RANK_LIST[@]}
+  nactiveRow=0
+  for i in $(seq 0 $((P - 1)) ); do
+    nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+    if [ $nlrank -gt 0 ]; then
+      nactiveRow=$(( nactiveRow + 1 ))
+    fi
+  done
+  decho "nactiveRow: $nactiveRow"
+else
+  create_regular_grid $P $Q
+  nactiveRow=$P
+fi
+
 #================
 # Create the env for the panes
 #================
 step "Creation of the pane"
-# TODO merge it witht the loop below ?
-pane_rank=0
-pane_exec_gdb=$TRUE
 
-if [ "$RANKS" != "" ]; then
-  pane_exec_gdb=$FALSE
-  for rank in ${RANK_LIST[@]}; do
-    if [ $rank -eq $pane_rank ]; then
-      pane_exec_gdb=$TRUE
-      break
-    fi
-  done
-fi
-create_pane $pane_rank $HORIZONTAL 70 ${HOSTS[0]} $PORT $pane_exec_gdb
+## Create the rows
+nrowCreated=0
+pane_size=70
+orient=$HORIZONTAL
+for p in $(seq 0 $((P - 1))); do
+  nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+  if [ $nlrank -eq 0 ]; then 
+    continue
+  fi
 
-# Create the columns
-for q in $(seq 1 $((Q-1))); do
+  HOST=${HOSTS[$p]}
   HOST=${HOSTS[0]}
-  col_pane_id=$q
-  pane_size=$((100 - 100 / (Q - q + 1) ))
-  pane_rank=$q
+  if [ $nrowCreated -gt 0 ]; then
+    pane_size=$((100 - 100 / (nactiveRow - p + 1) ))
+    orient=$VERTICAL
+  fi
+  pane_rank=${rowPtr[$p]}
+  col_pane_id=${paneAncestorId[$pane_rank]}
   pane_port=$((PORT + pane_rank))
   pane_exec_gdb=$TRUE
 
-  if [ "$RANKS" != "" ]; then
-    pane_exec_gdb=$FALSE
-    for rank in ${RANK_LIST[@]}; do
-      if [ $rank -eq $pane_rank ]; then
-        pane_exec_gdb=$TRUE
-        break
-      fi
-    done
-  fi
-  create_pane $col_pane_id $HORIZONTAL $pane_size \
+  create_pane $col_pane_id $orient $pane_size \
     $HOST $pane_port $pane_exec_gdb
+
+  nrowCreated=$(( nrowCreated + 1 ))
 done
 
-# Creation of the panes as a grid PxQ, column by column
-for q in $(seq 1 $Q); do
-  echo "Q = $q"
-  col_pane_id=$(( (q - 1) * $P + 1))
-  echo "Col_pane_id $col_pane_id"
+decho "Creation of $nrowCreated completed"
 
-  for p in $(seq 2 $((P - 0))); do
-    HOST=${HOSTS[$((p - 1))]}
-    pane_size=$((100 / (P - p + 2) ))
-    pane_rank=$(( (p - 1) * Q + q - 1 ))
+# Creation of the panes as a grid PxQ, column by column
+for p in $(seq 0 $((P - 1))); do
+  nlrank=$(( ${rowPtr[$((p + 1))]} - ${rowPtr[$p]} ))
+  if [ $nlrank -eq 0 ]; then 
+    continue
+  fi
+  decho "Add $((nlrank - 1)) for row $p"
+
+  for q in $(seq 1 $((nlrank - 1))); do
+    HOST=${HOSTS[$p]}
+    HOST=${HOSTS[0]}
+    pane_size=$((100 / (nlrank - q + 2) ))
+    pane_size=$((100 - 100 / (nlrank - q + 1) ))
+    pane_rank=$(( ${rowPtr[$p]} + q ))
+    col_pane_id=${paneAncestorId[$pane_rank]}
     pane_port=$((PORT + $pane_rank))
     pane_exec_gdb=$TRUE
 
-    if [ "$RANKS" != "" ]; then
-      pane_exec_gdb=$FALSE
-      for rank in ${RANK_LIST[@]}; do
-        if [ $rank -eq $pane_rank ]; then
-          pane_exec_gdb=$TRUE
-          break
-        fi
-      done
-    fi
-    create_pane $col_pane_id $VERTICAL $pane_size \
+    create_pane $col_pane_id $HORIZONTAL $pane_size \
       $HOST $pane_port $pane_exec_gdb
   done
 done
+
+## TODO merge it with the loop below ?
+#pane_rank=0
+#pane_exec_gdb=$TRUE
+#
+#if [ "$RANKS" != "" ]; then
+#  pane_exec_gdb=$FALSE
+#  for rank in ${RANK_LIST[@]}; do
+#    if [ $rank -eq $pane_rank ]; then
+#      pane_exec_gdb=$TRUE
+#      break
+#    fi
+#  done
+#fi
+#create_pane $pane_rank $HORIZONTAL 70 ${HOSTS[0]} $PORT $pane_exec_gdb
+#
+## Create the columns
+#for q in $(seq 1 $((Q-1))); do
+#  HOST=${HOSTS[0]}
+#  col_pane_id=$q
+#  pane_size=$((100 - 100 / (Q - q + 1) ))
+#  pane_rank=$q
+#  pane_port=$((PORT + pane_rank))
+#  pane_exec_gdb=$TRUE
+#
+#  if [ "$RANKS" != "" ]; then
+#    pane_exec_gdb=$FALSE
+#    for rank in ${RANK_LIST[@]}; do
+#      if [ $rank -eq $pane_rank ]; then
+#        pane_exec_gdb=$TRUE
+#        break
+#      fi
+#    done
+#  fi
+#  create_pane $col_pane_id $HORIZONTAL $pane_size \
+#    $HOST $pane_port $pane_exec_gdb
+#done
+#
+## Creation of the panes as a grid PxQ, column by column
+#for q in $(seq 1 $Q); do
+#  echo "Q = $q"
+#  col_pane_id=$(( (q - 1) * $P + 1))
+#  echo "Col_pane_id $col_pane_id"
+#
+#  for p in $(seq 2 $((P - 0))); do
+#    HOST=${HOSTS[$((p - 1))]}
+#    pane_size=$((100 / (P - p + 2) ))
+#    pane_rank=$(( (p - 1) * Q + q - 1 ))
+#    pane_port=$((PORT + $pane_rank))
+#    pane_exec_gdb=$TRUE
+#
+#    if [ "$RANKS" != "" ]; then
+#      pane_exec_gdb=$FALSE
+#      for rank in ${RANK_LIST[@]}; do
+#        if [ $rank -eq $pane_rank ]; then
+#          pane_exec_gdb=$TRUE
+#          break
+#        fi
+#      done
+#    fi
+#    create_pane $col_pane_id $VERTICAL $pane_size \
+#      $HOST $pane_port $pane_exec_gdb
+#  done
+#done
 
 echo -e "\nAttach to the session $TMUXSESSIONNAME:\t$TMUXCMD attach -t $TMUXSESSIONNAME"
