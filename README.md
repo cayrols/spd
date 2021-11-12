@@ -28,6 +28,7 @@ cp rc_files/pgdbrc_<machine_name> $HOME/.pgdbrc
 ```
 
 Then update it as needed.
+**Remark** The `PGDB_BIN` path has to be updated.
 
 ## Environment
 We use the tmux software to display and manage the different gdb and the gdbserver.
@@ -59,7 +60,7 @@ The idea is to reuse this line and to add at the beginning the call to pgdb as f
 
 This command line works as follow:
 * -p is the number of nodes
-* -q is the number of ranks for node
+* -q is the number of ranks per node
 * --exec is the name of the executable given to mpirun
 * --run corresponds to the mpirun command line that will be executed.
 
@@ -68,18 +69,34 @@ Some remarks:
 * For now, we do not parse automatically the command line, so we need to provide the name of the executable.
 * The flag --run must be the last one relative to pgdb
 
-## Additional case
+## Additional flags
 
+### gdbaddcmd flag
 Some additional arguments of pgdb can be provided. For example, we can pass 
 gdb commands to all gdb instances, all at once. For that, we use the flag `--gdbaddcmd', as follow:
 ```
-pgdb -p 2 -q 6 --gdbaddcmd "-ex 'c'" --exec ./exec_name <params_list>
+pgdb -p 2 -q 6 --gdbaddcmd "-ex 'c'" --exec ./exec_name --run mpirun -n 12 ./exec_name <params_list>
 ```
 
 In the example above, we request all gdb to execute `continue`.
 
 ```
-pgdb -p 2 -q 6 --gdbaddcmd "-ex 'b MPI_Init' -ex 'c'" --exec ./exec_name <params_list>
+pgdb -p 3 -q 3 --gdbaddcmd "-ex 'b MPI_Init' -ex 'c'" --exec ./exec_name --run mpirun -n 9 ./exec_name <params_list>
 ```
 In the example above, we put a breakpoint when MPI_Init routine is encountered and then we start the execution.
-It means all 12 ranks will do it.
+It means all 9 ranks will execute the sequence of instructions.
+
+### paging flag (**EXPERIMENTAL**)
+When a large number of ranks have to be debugged, the standard display might not
+be convenient. We added an experimental flag `--paging` that splits the 
+nodes into groups of two nodes, displaying one group per tmux window:
+```
+pgdb -p 6 -q 6 --paging --exec ./exec_name --run mpirun -n 36 ./exec_name <param_list>
+```
+
+### ranks flags (**EXPERIMENTAL**)
+Sometimes, we know the subset of ranks we want to debug. For that, we introduce
+the flag `--ranks` followed by a list of rank_id, all separated by a comma (for now):
+```
+pgdb -p 4 -q 2 --ranks 0,1,7 --exec ./exec_name --run mpirun -n 8 ./exec_name <param_list>
+```
