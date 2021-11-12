@@ -1,4 +1,4 @@
-SRC=toto.c
+SRC=example.c
 OBJ=$(SRC:.c=)
 
 all: ${OBJ}
