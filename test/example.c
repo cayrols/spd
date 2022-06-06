@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <mpi.h>
 
 /*
@@ -7,6 +8,9 @@
  * that is not allocated.
  */
 
+#define PARAM_ERROR 1
+
+#define N_EXAMPLE 3
 enum {
   example_buffer_overflow=1,
   example_freed_memory,
@@ -127,12 +131,33 @@ void double_free(MPI_Comm comm) {
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
+#define USAGE "%s: <example_id: %d>\n" \
+  "\texample_buffer_overflow: %d\n" \
+  "\texample_freed_memory: %d\n" \
+  "\texample_double_free: %d\n"
+
 int main( int argc, char *argv[])
 {
-  int rank          = 0;
-  int size          = 1;
-  int example       = 0;
+  int rank            = 0;
+  int size            = 1;
+  int default_example = example_freed_memory;
+  int example         = 0;
   MPI_Comm comm;
+
+  if (argc > 1) {
+    if (!strcmp( argv[1], "-h" )) {
+      printf( USAGE, argv[0], default_example,
+          example_buffer_overflow, example_freed_memory, example_double_free );
+      return PARAM_ERROR;
+    }
+    int given_param = atoi(argv[1]);
+    if (given_param > 0  && given_param <= N_EXAMPLE)
+      example = given_param;
+    else {
+      fprintf( stderr, "Error, value %d incorrect.\n" );
+      return PARAM_ERROR;
+    }
+  }
 
   MPI_Init( &argc, &argv );
   MPI_Comm_dup( MPI_COMM_WORLD, &comm );
