@@ -4,7 +4,7 @@ OBJ=$(SRC:.c=)
 all: ${OBJ}
 
 %: %.c
-	mpicc $< -o $@
+	mpicc -g $< -o $@
 
 clean:
 	-${RM} ${OBJ}
