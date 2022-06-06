@@ -8,12 +8,46 @@ TRUE=1
 FALSE=0
 start_server=$TRUE
 
-# TODO add support for other mpi distrib than OMPI, meaning manage the env var
-world_rank=$OMPI_COMM_WORLD_RANK
-if [ "$world_rank" == "" ]; then
-  echo "Error, no world rank found"
-  exit 1
-fi
+DEVMODE=$TRUE
+DEVMODE=$FALSE
+
+function decho(){
+  if [ "$DEVMODE" -eq "$TRUE" ]; then
+    echo "$@"
+  fi 
+}
+
+# This function seeks on the possible patterns in the env to extract the
+# world rank.
+function get_world_rank() {
+
+ #world_rank=$OMPI_COMM_WORLD_RANK
+ #world_rank=$PMI_RANK
+  local possible_patterns=( OMPI_COMM_WORLD_RANK PMI_RANK )
+  local output=$( printenv | grep RANK )
+  echo $output
+
+  # For each possible patterns
+  for possible_pattern in ${possible_patterns[@]}; do
+    if [[ $output == *"$possible_pattern"* ]]; then
+      decho "Found: $possible_pattern"
+
+      # Search env var
+      for env_var in $output; do
+        if [[ $env_var == "$possible_pattern"* ]]; then
+          world_rank=$( echo $env_var | cut -d '=' -f 2 )
+          break
+        fi
+      done
+      break
+    fi
+  done
+
+  if [ "$world_rank" == "" ]; then
+    echo "Error, no world rank found"
+    exit 1
+  fi
+}
 
 function chelp(){
   bold "TODO FINISH IT"
@@ -86,6 +120,8 @@ function parse_param(){
 }
 
 parse_param "$@"
+
+get_world_rank 
 
 GDB_HOST=$(hostname) # Do we need the host name ?
 GDB_PORT=$(( DEFAULT_PORT + $world_rank ))
