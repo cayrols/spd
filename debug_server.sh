@@ -119,9 +119,13 @@ function parse_param(){
   done
 }
 
-parse_param "$@"
+################
+# MAIN
+#
 
 get_world_rank 
+
+parse_param "$@"
 
 GDB_HOST=$(hostname) # Do we need the host name ?
 GDB_PORT=$(( DEFAULT_PORT + $world_rank ))
