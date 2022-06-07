@@ -68,6 +68,7 @@ This command line works as follow:
 Some remarks:
 * For now, we do not parse automatically the command line, so we need to provide the name of the executable.
 * The flag --run must be the last one relative to pgdb
+* It seems (at least on Saturn) even when the flag `--cuda-use-lockfile=0` is used, it is not possible to use cuda-gdb when the number of MPI processes is greater than the number of GPU (at least -n 2 and 1 GPU does not work. Error: gdbserver: Another cuda-gdb instance is working with the lock file. Try again
 
 ## Additional flags
 
