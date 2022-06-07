@@ -5,8 +5,8 @@ GDBSERVEREXECNAME=cuda-gdbserver
 GDBSERVERPARAMS="--cuda-use-lockfile=0"
 
 #Set the path for gdbserver, gdb, and debug_server
-GDBSERVER_BIN=/usr/local/cuda-11.4/bin
-GDB_BIN=/usr/local/cuda-11.4/bin
+GDBSERVER_BIN=/usr/local/cuda-11.6/bin
+GDB_BIN=/usr/local/cuda-11.6/bin
 
 PGDB_BIN=/home/scayrols/scripts/pgdb
 
