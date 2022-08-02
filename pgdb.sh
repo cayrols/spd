@@ -114,7 +114,7 @@ function chelp(){
   echo -e "\t\t\tall panes except for the pane 0 (entered using 'C-b :')."
 }
 
-# This peice of code is needed here since the parameters can overwrite part
+# This piece of code is needed here since the parameters can overwrite part
 # of the content of the configuration file.
 step "Configuration file"
 # Source the RC file that will overwrite the path
