@@ -5,6 +5,7 @@ LOCAL_FIFOS=local_fifos
 
 TRUE=1
 FALSE=0
+split_output=$TRUE
 
 DEVMODE=$TRUE
 DEVMODE=$FALSE
@@ -54,13 +55,13 @@ function parse_param(){
         ;;
       --debuggingRanks)
         shift
-        start_server=$FALSE
+        split_output=$FALSE
         ranks=( $( echo $1 | tr -s ',' ' ' ) )
 
         # Check whether world_rank is in the list
         for rank in ${ranks[@]}; do
           if [ $rank -eq $world_rank ]; then
-            start_server=$TRUE
+            split_output=$TRUE
             break;
           fi
         done
@@ -84,10 +85,15 @@ get_world_rank
 parse_param "$@"
 
 pane_id=$world_rank
+# Assuming for now that the pane created it.
 fifo_pane_id=$LOCAL_FIFOS/fifo_$pane_id
 
-# Assuming for now that the pane created it.
-#mkfifo $fifo_pane_id
+if [ $split_output -eq $FALSE ]; then
+  echo "[$world_rank] exec $CMD"
+  exec $CMD
+  exit 0
+fi
+
 
 echo "execute: $CMD > $fifo_pane_id 2>&1"
 if [ "$DEVMODE" -eq "$FALSE" ]; then

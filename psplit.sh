@@ -78,16 +78,15 @@ function chelp(){
 
   bold    "REMARKS"
   bold    "EXAMPLES"
- #echo -e "\t\tThere is a test folder with a toto.c program."
- #echo -e "\t\tGo to test and compile it using make."
- #echo -e "\t\tExport PGDB_BIN=<location_of_debug_server.sh>"
- #echo -e "\t\tMake sure, you already have a tmux session running."
- #echo -e "\t\tThen, use the program as follow :"
- #echo -e "\t\t\t../pgdb.sh -p 1 -q 2 --port 65000 --exec toto --run mpirun -n 2 toto"
- #echo -e "\t\tFinally, attach to the tmux session."
- #echo -e "\t\tTIPS : during debug session, the bind 'C-b z' focuses on the current pane."
- #echo -e "\t\tTIPS : during debug session, the command kill-all -a -t 0 closes"
- #echo -e "\t\t\tall panes except for the pane 0 (entered using 'C-b :')."
+  echo -e "\t\tThere is a test folder with a program example.c."
+  echo -e "\t\tGo to test and compile it using make."
+  echo -e "\t\tExport PGDB_BIN=<split_output.sh>"
+  echo -e "\t\tThen, use the program as follow :"
+  echo -e "\t\t\t../psplit.sh -p 1 -q 2 --exec toto --run mpirun -n 2 example"
+  echo -e "\t\tFinally, attach to the tmux session."
+  echo -e "\t\tTIPS : during debug session, the bind 'C-b z' focuses on the current pane."
+  echo -e "\t\tTIPS : during debug session, the command kill-all -a -t 0 closes"
+  echo -e "\t\t\tall panes except for the pane 0 (entered using 'C-b :')."
 }
 
 # This piece of code is needed here since the parameters can overwrite part
@@ -191,25 +190,9 @@ function create_pane() {
 
   decho "PANE:$PANE, ORIENT:$ORIENT, SIZE:$SIZE, HOST:$HOST"
   
-  sleep 1
   echo "$TMUX_CMD splitw -$ORIENT -p $SIZE -t $PANE "$cmd""
   if [ $DEVMODE -eq $FALSE ]; then
     $TMUX_CMD splitw -$ORIENT -p $SIZE -t $PANE "$cmd"
-
-   #if [ ! -e local_fifos/fifo_${PANE} ]; then
-   #  echo "mkfifo local_fifos/fifo_${PANE}"
-   #  mkfifo local_fifos/fifo_${PANE}
-   #else
-   #  echo "fifo local_fifos/fifo_${PANE} already exists."
-   #fi
-
-   #cmd="cat < local_fifos/fifo_${PANE}"
-   #echo "Wait $PSPLIT_WAITING_TIME s before sending $cmd"
-   #sleep $PSPLIT_WAITING_TIME
-
-   #echo "$TMUX_CMD send-keys -t $((PANE + 1)) \"$cmd\" Enter"
-   #$TMUX_CMD send-keys -t $((PANE + 1)) "$cmd" Enter
-   #tmux send-keys -t $PANE "target remote ${HOST}:${PORT}" Enter
   fi
 
 }
@@ -232,11 +215,15 @@ function setup_pane() {
 
     # Overwrite the cmd
     cmd="cat < local_fifos/fifo_${PROC_RANK}"
-    cmd="while true; do if read line < local_fifos/fifo_${PROC_RANK}; then cat < local_fifos/fifo_${PROC_RANK}; fi; done"
-    cmd="tail -f $pane_pipe"
-    cmd="while IFS= read -r line; do echo \$line; done < $pane_pipe"
-    echo "Wait $PSPLIT_WAITING_TIME s before sending $cmd"
-    sleep $PSPLIT_WAITING_TIME
+   #cmd="tail -f $pane_pipe"
+   #cmd="while IFS= read -r line; do echo \$line; done < $pane_pipe"
+    cmd="cpt=0; while true; do "
+    cmd+="echo -e \"\n******************* Start run \$cpt\n\"; "
+    cmd+="while IFS= read -r line; do "
+    cmd+="echo \$line; "
+    cmd+="done < $pane_pipe; "
+    cmd+="cpt=\$(( cpt + 1)); "
+    cmd+="done"
 
     echo "$TMUX_CMD send-keys -t $PANE \"$cmd\" Enter"
     $TMUX_CMD send-keys -t $PANE "$cmd" Enter
@@ -634,21 +621,21 @@ done
 step "Launch the parallel execution"
 
 #create the server
-SERVER_CMD="${PGDB_BIN}/split_output.sh"
+MASTER_CMD="${PGDB_BIN}/split_output.sh"
 
 # Select the ranks to debug
-#if [ "$RANKS" != "" ]; then
-#  SERVER_CMD+=" --debuggingRanks '$RANKS'"
-#fi
-SERVER_CMD+=" --run"
-SERVERCMD=$(echo $CMDLINE | sed "s:${EXEC}:${SERVER_CMD} &:" )
+if [ "$RANKS" != "" ]; then
+  MASTER_CMD+=" --debuggingRanks '$RANKS'"
+fi
+MASTER_CMD+=" --run"
+MASTER_CMD=$(echo $CMDLINE | sed "s:${EXEC}:${MASTER_CMD} &:" )
 
 echo -e "\nWait for the creation of the panes: $PSPLIT_WAITING_TIME s"
 sleep $PSPLIT_WAITING_TIME
 
-echo "$TMUX_CMD send-keys -t 0 "$SERVERCMD" Enter"
+echo "$TMUX_CMD send-keys -t 0 "$MASTER_CMD" Enter"
 if [ $DEVMODE -eq $FALSE ]; then
-  $TMUX_CMD send-keys -t 0 "$SERVERCMD" Enter
+  $TMUX_CMD send-keys -t 0 "$MASTER_CMD" Enter
 fi
 
 echo -e "\nAttach to the session $TMUX_SESSION_NAME\t$TMUX_CMD attach -t $TMUX_SESSION_NAME"
