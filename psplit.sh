@@ -3,6 +3,9 @@
 # We use the exec_name to separate the classical command into the mpi param and
 # the exec param
 
+# Used to avoid errors when executed.
+set -euo pipefail
+
 TRUE=1
 FALSE=0
 
@@ -30,25 +33,25 @@ PSPLIT_WAITING_TIME=2
 #                                  FUNCTIONS                                  #
 ################################################################################
 #print in bold text
-function bold(){
+bold(){
 
   echo -e "\033[1m$1\033[0m"
 
 }
 
-function decho(){
+decho(){
   if [ "$DEVMODE" -eq "$TRUE" ]; then
     echo "$@"
   fi 
 }
 
-function step(){
+step(){
   echo -e "\n******** $1"
 }
 
 
 
-function chelp(){
+chelp(){
   echo -e "\t\t\t\tGeneral Commands Manual\t\t\t\t"
   bold    "NAME"
   echo -e "\t$0 - split the output of each rank into a specific pane"
@@ -101,7 +104,7 @@ else
   echo "No $RC_FILE file found in $HOME"
 fi
 
-function parse_param(){
+parse_param(){
   while [ $# -gt 0 ]; do
     case $1 in
       -h | --help )
@@ -156,7 +159,7 @@ function parse_param(){
   done
 }
 
-function create_window(){
+create_window(){
   local tmuxSession=$1
   local windowId=$2
   shift 2
@@ -169,7 +172,7 @@ function create_window(){
   fi
 }
 
-function select_window(){
+select_window(){
   local tmuxSession=$1
   local windowId=$2
 
@@ -181,7 +184,7 @@ function select_window(){
 
 #create the panes
 # NOTE: Use the bash global vars GDBADDCMD and EXEC
-function create_pane() {
+create_pane() {
   local PANE=$1
   local ORIENT=$2
   local SIZE=$3
@@ -198,7 +201,7 @@ function create_pane() {
 }
 
 # Setup the given pane
-function setup_pane() {
+setup_pane() {
   local PANE=$1
   local PROC_RANK=$2
   local cmd="bash"
@@ -231,7 +234,7 @@ function setup_pane() {
 
 }
 
-function create_regular_grid(){
+create_regular_grid(){
   local nrow=$1
   local ncol=$2
 
@@ -287,7 +290,7 @@ function create_regular_grid(){
   paneAncestorId=( ${lpaneAncestorId[@]} )
 }
 
-function is_active_rank(){
+is_active_rank(){
   local rank=$1
   shift
   local ranks=$@
@@ -302,7 +305,7 @@ function is_active_rank(){
   done
 }
 
-function create_grid(){
+create_grid(){
   local nrow=$1
   local ncol=$2
   shift 2
@@ -360,7 +363,7 @@ function create_grid(){
   paneAncestorId=( ${lpaneAncestorId[@]} )
 }
 
-function display_pane(){
+display_pane(){
   local tmuxSession=$1
   local windowId=$2
   local rowOffset=$3
@@ -438,7 +441,7 @@ function display_pane(){
   decho "Returned cur_npaneDisplayed:$cur_npaneDisplayed"
 }
 
-function setup_window_panes(){
+setup_window_panes(){
   local tmuxSession=$1
   local windowId=$2
   local rowOffset=$3
@@ -477,7 +480,7 @@ function setup_window_panes(){
   done
 }
 
-function get_rows_to_display(){
+get_rows_to_display(){
   local nrow=$1
   local nrowStart=$2
   local pageMaxNrow=$3
@@ -540,7 +543,10 @@ echo "HOSTS : ${HOSTS[@]}"
 step "Gestion of the tmux"
 echo "Checking session $TMUX_SESSION_NAME"
 
-tmux_sessions=$($TMUX_CMD ls 2>/dev/null | grep $TMUX_SESSION_NAME)
+set -x
+
+#tmux_sessions=$($TMUX_CMD ls 2>/dev/null | grep $TMUX_SESSION_NAME)
+$TMUX_CMD has-session -t $TMUX_SESSION_NAME 2>/dev/null || true
 tmux_exist=$?
 if [ $tmux_exist -eq 1 ]; then
   echo "Creation of the tmux session named '$TMUX_SESSION_NAME'"

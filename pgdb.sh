@@ -410,7 +410,7 @@ function display_pane(){
     fi
 
     HOST=${HOSTS[$p]}
-    HOST=${HOSTS[0]}
+    HOST=${HOSTS[0]} #XXX !!!
     if [ $nrowCreated -gt 0 ]; then
       pane_size=$((100 - 100 / (nactiveRow - nrowCreated + 1) ))
       orient=$VERTICAL

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Needed params
-LOCAL_FIFOS=local_fifos
+LOCAL_FIFOS=$HOME/.spd/local_fifos
 
 TRUE=1
 FALSE=0
