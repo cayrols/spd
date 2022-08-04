@@ -20,9 +20,12 @@ ERROR_PIPE=1
 # A command cannot be sent to a pane
 ERROR_SEND_CMD=2
 
-#Pane creation var
+#Pane orientation choices
 VERTICAL=v
 HORIZONTAL=h
+
+# Define the master pane id
+MASTER_PANE=0
 
 main() {
   local desc="This function is the main function."
@@ -30,25 +33,35 @@ main() {
   local mpi_param=""
   local exec_param=""
 
+  #================
+  # Init the env
+  #================
   # Check the main internal folder exists
   if [ ! -e ${SPD_USER_DIR} ]; then
     echo "Creation of the user root for temporarly ${SPD_USER_DIR}"
     mkdir ${SPD_USER_DIR}
   fi
+  # Create the folder that will contains the pipes
+  if [ ! -e ${SPD_PIPE_FOLDER} ]; then
+    echo "Creation of ${SPD_PIPE_FOLDER}"
+    mkdir ${SPD_PIPE_FOLDER}
+  fi
 
   #================
   # Parse the input parameters and extract info
   #================
+  step "Parse user input"
   parse_param ${input_params[@]}
+
   mpi_param=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME} .*$::" | \
     sed "s%${EXEC_NAME}%%" )
   exec_param=$(echo ${CMD_LINE} | sed "s:^.*${EXEC_NAME}::" )
 
-  step "Parsed required information"
-  echo "EXECUTION: grid of ${P}x${Q}"
-  echo "CMDLINE: ${CMD_LINE}"
-  echo "MPI params: ${mpi_param}"
-  echo "EXEC params: ${exec_param}"
+  bold "Parsed information:"
+  echo "Command line   : ${CMD_LINE}"
+  echo "Execution      : grid ${P}x${Q}"
+  echo "MPI parameters : ${mpi_param}"
+  echo "Exec parameters: ${exec_param}"
 
   #================
   # Detect the hosts
@@ -71,10 +84,10 @@ main() {
   #================
   step "Gestion of the tmux"
   TMUX_CMD="tmux -S ${SPD_USER_TMUX_TMPDIR}"
-set +e
 
   # Check that tmux session already exists
   echo "Checking session ${SPD_TMUX_SESSION_NAME}"
+set +e
   ${TMUX_CMD} has-session -t ${SPD_TMUX_SESSION_NAME} 2>/dev/null
   local tmux_exist=$?
 set -e
@@ -96,7 +109,7 @@ set -e
   #================
   # Generate the grid 
   #================
-  step "Generating the grid"
+  step "Generation of the grid"
   if [ "${RANKS}" != "" ]; then
     create_sparse_grid ${P} ${Q} ${RANK_LIST[@]}
   else
@@ -106,48 +119,40 @@ set -e
   #================
   # Create the env for the panes
   #================
-  step "Creation of the pane"
+  step "Creation of the pane(s)"
 
   # Count the total number of non-empty rows
-  local nactive_row=0
+  local ntotal_active_rows=0
   local nlrank=0
   for i in $( seq 0 $((P - 1)) ); do
     nlrank=$(( ${ROW_PTR[ $((i + 1)) ]} - ${ROW_PTR[ ${i} ]} ))
     decho "Row ${i}: ${nlrank} elements"
     if [ ${nlrank} -gt 0 ]; then
-      nactive_row=$(( nactive_row + 1 ))
+      ntotal_active_rows=$(( ntotal_active_rows + 1 ))
     fi
   done
 
+  # Count the number of pages needed:
+  # - if paging is not requested, only one window will be created.
   local nrowToDisplay=0
   local nwindows=0
   if [ ${PAGING} -eq ${TRUE} ]; then
     nrowToDisplay=${NROW_PER_PAGE}
     local PYTHONCMD="from math import ceil; "
-    PYTHONCMD+="print( ceil(${nactive_row}/${NROW_PER_PAGE}) )"
+    PYTHONCMD+="print( ceil(${ntotal_active_rows}/${NROW_PER_PAGE}) )"
     nwindows=$( ${PYTHON_BIN} -c "$PYTHONCMD" )
     decho "nwindows: ${nwindows}"
-
-   #get_rows_to_display $P $nrowDisplayed $NROW_PER_PAGE ${rowPtr[@]}
   else
     nrowToDisplay=$P
     nwindows=1
-  fi
-
-  # XXX To clean after
-  if [ ! -e ${SPD_USER_DIR} ]; then
-    echo "Creation of ${SPD_USER_DIR}"
-    mkdir ${SPD_USER_DIR}
-  fi
-  if [ ! -e ${SPD_PIPE_FOLDER} ]; then
-    echo "Creation of ${SPD_PIPE_FOLDER}"
-    mkdir ${SPD_PIPE_FOLDER}
   fi
 
   local nrowDisplayed=0
   local npaneDisplayed=0
   local rowToDisplay=()
 
+  # Compute the list of rows to display.
+  # NOTE: This function returns the array rowToDisplay
   compute_list_rows_to_display ${nrowDisplayed} ${P} \
     ${nrowToDisplay} ${ROW_PTR[@]}
   rowToDisplay=( ${_RETVAL[@]} )
@@ -168,8 +173,8 @@ set -e
         "_${rowToDisplay[$(( ${#rowToDisplay[@]} - 1))]}"
       create_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${window_name}
     fi
-    nactive_row=${#rowToDisplay[@]}
-    decho "[Page:${window_id}] nactive_row: ${nactive_row}"
+    nlactive_rows=${#rowToDisplay[@]}
+    decho "[Page:${window_id}] nactive_row: ${nlactive_rows}"
 
     decho "Rows to display: ${rowToDisplay[@]}"
     display_panes_in_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${nrowDisplayed} \
@@ -199,10 +204,7 @@ set -e
   echo -e "\nWait for the creation of the panes: $SPD_WAITING_TIME s"
   sleep $SPD_WAITING_TIME
 
-  echo "${TMUX_CMD} send-keys -t 0 "${MASTER_CMD}" Enter"
-  if [ ${DEV_MODE} -eq ${FALSE} ]; then
-    ${TMUX_CMD} send-keys -t 0 "${MASTER_CMD}" Enter
-  fi
+  send_cmd_to_pane ${MASTER_PANE} ${MASTER_CMD}
 
   echo -e "\nAttach to the session ${SPD_TMUX_SESSION_NAME}" \
     "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
@@ -482,12 +484,12 @@ setup_pane_with_gdb() {
 }
 
 compute_pane_size() {
-  local desc="This function computes the size of a pane."
-  local nactive_row=$1
-  local nrow_created=$2
+  local desc="This function computes the size of a pane within a row."
+  local ntotal_col=$1
+  local col_already_created=$2
 
   # Returned value
-  _RETVAL=$((100 - 100 / (nactive_row - nrow_created + 1) ))
+  _RETVAL=$((100 - 100 / (ntotal_col - col_already_created + 1) ))
 }
 
 display_panes_in_window(){
@@ -505,7 +507,7 @@ display_panes_in_window(){
   ## Create the rows first
   local nrow_created=0
   local nlpane_created=0
-  local pane_size=70
+  local pane_size=$(( 100 - MASTER_PANE_SIZE ))
   local orientation=${HORIZONTAL}
   local nlrank=0
   local host=0
