@@ -24,6 +24,9 @@ ERROR_SEND_CMD=2
 VERTICAL=v
 HORIZONTAL=h
 
+# Value used by default when needed
+DEFAULT_PAGING=${FALSE}
+
 # Define the master pane id
 MASTER_PANE=0
 
@@ -46,6 +49,7 @@ main() {
     echo "Creation of ${SPD_PIPE_FOLDER}"
     mkdir ${SPD_PIPE_FOLDER}
   fi
+  setup_output_format
 
   #================
   # Parse the input parameters and extract info
@@ -110,9 +114,11 @@ set -e
   # Generate the grid 
   #================
   step "Generation of the grid"
-  if [ "${RANKS}" != "" ]; then
+  if [ ${#RANK_LIST[@]} -gt 0 ]; then
+    decho "Creation of sparse grid"
     create_sparse_grid ${P} ${Q} ${RANK_LIST[@]}
   else
+    decho "Creation of dense grid"
     create_dense_grid ${P} ${Q}
   fi
 
@@ -195,8 +201,9 @@ set -e
   MASTER_CMD="${PGDB_BIN}/split_output.sh" # FIXME
 
   # Select the ranks to debug
-  if [ "${RANKS}" != "" ]; then
-    MASTER_CMD+=" --debuggingRanks '${RANKS}'"
+  if [ ${#RANK_LIST[@]} -gt 0 ]; then
+    local raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
+    MASTER_CMD+=" --debuggingRanks ${raw_rank_list}"
   fi
   MASTER_CMD+=" --run"
   MASTER_CMD=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${MASTER_CMD} &:" )
@@ -206,7 +213,7 @@ set -e
 
   send_cmd_to_pane ${MASTER_PANE} ${MASTER_CMD}
 
-  echo -e "\nAttach to the session ${SPD_TMUX_SESSION_NAME}" \
+  important "To attach to the session ${SPD_TMUX_SESSION_NAME}:" \
     "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
 }
 
@@ -217,14 +224,14 @@ set -e
 bold() {
   local desc="This function prints in bold the given parameter."
 
-  echo -e "\033[1m${1-}\033[0m"
+  echo -e "${BOLD}${1-}${NOFORMAT}"
 }
 
 # Conditional print
 decho() {
   local desc="This function prints the given parameters only if dev_mode is on."
 
-  if [ "${DEV_MODE}" -eq "${TRUE}" ]; then
+  if [ "${DEV_MODE}" -eq "${TRUE}" -o "${VERBOSE}" -eq "${TRUE}" ]; then
     echo "$@"
   fi 
 }
@@ -233,7 +240,7 @@ decho() {
 step() {
   local desc="This function prints the name of the step passed in parameter."
 
-  echo -e "\n******** $1"
+  echo -e "\n${GREEN}******** $1${NOFORMAT}"
 }
 
 # Print error message and can exit if two parameters are given
@@ -243,12 +250,59 @@ step() {
 error() {
   local desc="This function prints an error message and may return."
 
-  echo -e "\nError,\t${1-}\n"
+  echo -e "\n${RED}Error,\t${1-}${NOFORMAT}\n"
   if [ $# -eq 2 ]; then
-    echo -e "\t\tSTOP\n"
+    echo -e "${RED}\t\tSTOP${NOFORMAT}\n"
     exit $2
   fi
 
+}
+
+# Print warning message
+# PARAM
+# $1    is the message to be displayed
+warning() {
+  local desc="This function prints a warning message."
+  local msg=$*
+
+  echo -e "${YELLOW}Warning,\t${msg}${NOFORMAT}\n"
+}
+
+# Print important message
+# PARAM
+# $1    is the message to be displayed
+important() {
+  local desc="This function prints important message."
+  local msg=$*
+
+  echo -e "\n${BLUE}User info,\t${msg}${NOFORMAT}\n"
+}
+
+# Concat elements of an array
+concat_array() {
+  local IFS=$1
+  shift
+
+  echo "$*"
+}
+
+# Original function from: https://betterdev.blog/minimal-safe-bash-script-template/
+setup_output_format() {
+  # NOTE: -t is used to test if the file descriptor 1 exists i.e. stdout
+  if [[ -t 1 ]] && [[ ${NO_COLOR:-FALSE} -eq ${FALSE} ]] \
+    && [[ "${TERM-}" != "dumb" ]]; then
+    NOFORMAT='\033[0m'
+    BOLD='\033[1m'
+    RED='\033[0;31m'    GREEN='\033[0;32m' YELLOW='\033[1;33m'
+    ORANGE='\033[0;33m' BLUE='\033[0;34m'
+    PURPLE='\033[0;35m' CYAN='\033[0;36m'
+  else
+    NOFORMAT=''
+    BOLD=''
+    GREEN='' RED='' YELLOW=''
+    BLUE='' PURPLE='' CYAN=''
+    ORANGE=''
+  fi
 }
 
 # Help routine that lists all parameters of the script
@@ -298,6 +352,7 @@ chelp() {
 # Parse the given parameters
 parse_param() {
   local desc="This function parses the parameters given to this script."
+  local answer=""
 
   while [ $# -gt 0 ]; do
     case $1 in
@@ -316,7 +371,17 @@ parse_param() {
         shift
         ;;
       --paging)
-        PAGING=${TRUE}
+        shift
+        answer=$1
+        if [[ "${answer}" == 'y' ]]; then
+          PAGING=${TRUE}
+        elif [[ "${answer}" == 'n' ]]; then 
+          PAGING=${FALSE}
+        else
+          warning "Unknown value ${answer} for param '--paging'." \
+            "Use default value."
+          PAGING=${DEFAULT_PAGING}
+        fi
         shift
         ;;
      #--rearrangeGrid) # TODO but not implemented yet
@@ -325,8 +390,7 @@ parse_param() {
      #  ;;
       --ranks)
         shift
-        GIVEN_RANKS=$1
-        RANK_LIST=$( echo ${GIVEN_RANKS} | tr -s ',' ' ' )
+        RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
         decho "List of provided ranks: ${RANK_LIST[@]}"
         shift
         ;;
@@ -693,8 +757,8 @@ create_dense_grid() {
 #   2/ number of columns
 #   3/ List of ranks to put in the grid
 create_sparse_grid() {
-  local desc="This function returns a CSR representation of a sparse grid "\
-    "where only the given ranks are inserted."
+  local desc="This function returns a CSR representation of a sparse grid "
+    desc+="where only the given ranks are inserted."
   local nrow=$1
   local ncol=$2
   shift 2
