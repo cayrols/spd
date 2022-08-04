@@ -225,7 +225,7 @@ set -e
   #================
   # Launch the execution
   #================
-  if [ ${PANE_MODE} == "output" ]; then
+  if [ ${PANE_MODE} == "split" ]; then
     start_master
   fi
 
@@ -443,6 +443,14 @@ parse_param() {
         shift
         CMD_LINE=$*
         break
+        ;;
+      --split)
+        shift
+        PANE_MODE="split"
+        ;;
+      --gdb)
+        shift
+        PANE_MODE="gdb"
         ;;
       --dev) #Intent to be removed
         shift
@@ -713,7 +721,7 @@ setup_window_panes(){
       decho "pane_idx=${pane_idx} pane_rank=${pane_rank}"
 
       # TODO add switch here to select one mode or another
-      if [ ${PANE_MODE} == "output" ]; then
+      if [ ${PANE_MODE} == "split" ]; then
         setup_pane_using_pipe ${pane_idx} ${pane_rank}
       elif [ ${PANE_MODE} == "gdb" ]; then 
         setup_pane_with_gdb ${pane_idx} ${HOSTS[0]} ${pane_port} # FIXME host
@@ -910,6 +918,7 @@ compute_list_rows_to_display() {
 start_master() {
   local desc="This function sets the global variable MASTER_CMD."
   local raw_rank_list=""
+  local cmd=""
   local master_cmd=""
 
   step "Launch the parallel execution"
@@ -919,22 +928,26 @@ start_master() {
   sleep $SPD_WAITING_TIME
 
   #create the server
-  master_cmd="${SPD_ROOT}/split_output.sh"
+  master_cmd="${SPD_ROOT}/master_script.sh"
 
   # Select the ranks to debug
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
-    master_cmd+=" --debuggingRanks ${raw_rank_list}"
+    master_cmd+=" --splittingRanks ${raw_rank_list}"
+  else
+    master_cmd+=" --split"
   fi
+  master_cmd+=" --pipe_dir ${SPD_PIPE_FOLDER}"
   master_cmd+=" --run"
-  master_cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${master_cmd} &:" )
+  cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${master_cmd} &:" )
 
-  send_cmd_to_pane ${MASTER_PANE} ${master_cmd}
+  send_cmd_to_pane ${MASTER_PANE} ${cmd}
 }
 
 #if [ ${ATTACH} -eq ${FALSE} ]; then
 start_gdbserver() {
   local desc="This function starts the gdbserver on the master pane."
+  local cmd=""
   local master_cmd=""
   local gdbserver_cmd=""
   local raw_rank_list=""
@@ -963,9 +976,9 @@ start_gdbserver() {
   fi
   gdbserver_cmd+=" --port ${PORT}"
   gdbserver_cmd+=" --run"
-  master_cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${gdbserver_cmd} &:" )
+  cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${gdbserver_cmd} &:" )
 
-  send_cmd_to_pane ${MASTER_PANE} ${master_cmd}
+  send_cmd_to_pane ${MASTER_PANE} ${cmd}
 
   echo "Wait for the gdbserver to start: ${SPD_GDBSERVER_WAITING_TIME} s"
   sleep ${SPD_GDBSERVER_WAITING_TIME}
