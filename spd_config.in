@@ -62,17 +62,15 @@ PANE_MODE="split"
 #===============
 # GDB part
 
-# NOTE: Since gdb does not work properly on Summit,
-# we force to use cuda-gdb instead
 # Define which gdbserver to use alongwith its path and params
-GDB_BIN=${CUDA_ROOT}/bin
-GDB_EXEC_NAME=cuda-gdb
-GDB_PARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+GDB_BIN=""
+GDB_EXEC_NAME=gdb
+GDB_PARAMS="-ex "\'"set cuda memcheck on"\'""
 
 # Define which gdbserver to use alongwith its path and params
-GDBSERVER_BIN=${CUDA_ROOT}/bin
-GDBSERVER_EXEC_NAME=cuda-gdbserver
-GDBSERVER_PARAMS="--cuda-use-lockfile=0"
+GDBSERVER_BIN=""
+GDBSERVER_EXEC_NAME=gdbserver
+GDBSERVER_PARAMS=""
 
 # USER may define the command to launch gdb on panes
 # SPD_GDB_CMD=""
