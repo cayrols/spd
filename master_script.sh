@@ -3,8 +3,8 @@
 TRUE=1
 FALSE=0
 
-start_server=$FALSE
-split_output=$FALSE
+START_SERVER=$FALSE
+SPLIT_OUTPUT=$FALSE
 
 DEV_MODE=$TRUE
 DEV_MODE=$FALSE
@@ -129,7 +129,7 @@ function parse_param(){
         ;;
       --debuggingRanks)
         shift
-        start_server=$FALSE
+        START_SERVER=$FALSE
         ranks=( $( echo $1 | tr -s ',' ' ' ) )
 
         # Check whether world_rank is in the list
@@ -145,7 +145,7 @@ function parse_param(){
         ;;
       --splittingRanks)
         shift
-        start_server=$FALSE
+        START_SERVER=$FALSE
         ranks=( $( echo $1 | tr -s ',' ' ' ) )
 
         # Check whether world_rank is in the list

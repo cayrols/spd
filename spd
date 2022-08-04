@@ -963,7 +963,6 @@ start_gdbserver() {
   fi
 
   #create the server
-  gdbserver_cmd="${SPD_ROOT}/debug_server.sh"
   gdbserver_cmd="${SPD_ROOT}/master_script.sh"
 
   # Select the ranks to debug
