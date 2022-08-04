@@ -1,0 +1,8 @@
+GDB_BIN=/usr/local/cuda-11.6/bin
+GDB_EXEC_NAME=cuda-gdb
+GDB_PARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+
+GDBSERVER_BIN=/usr/local/cuda-11.6/bin
+GDBSERVER_EXEC_NAME=cuda-gdbserver
+GDBSERVER_PARAMS="--cuda-use-lockfile=0"
+

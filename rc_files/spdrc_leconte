@@ -1,0 +1,9 @@
+GDB_BIN=/nfs/apps/spacks/2022-02-10/opt/spack/linux-centos7-x86_64/gcc-7.3.0/cuda-11.0.2-o4s5wwyetwtqlr6z4zfmbjboarr6u2zc/bin
+GDB_EXEC_NAME=cuda-gdb
+GDB_PARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+
+GDBSERVER_BIN=/nfs/apps/spacks/2022-02-10/opt/spack/linux-centos7-x86_64/gcc-7.3.0/cuda-11.0.2-o4s5wwyetwtqlr6z4zfmbjboarr6u2zc/bin
+GDBSERVER_EXEC_NAME=cuda-gdbserver
+GDBSERVER_PARAMS="--cuda-use-lockfile=0"
+
+

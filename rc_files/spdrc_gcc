@@ -1,0 +1,5 @@
+GDB_BIN=/sw/spack/2022-02-10/opt/spack/linux-scientific7-x86_64/gcc-7.3.0/gdb-11.1-qi5k4k36l2e7okurklt2cro43rgxj62r/bin
+GDB_EXEC_NAME=gdb
+
+GDBSERVER_BIN=/sw/spack/2022-02-10/opt/spack/linux-scientific7-x86_64/gcc-7.3.0/gdb-11.1-qi5k4k36l2e7okurklt2cro43rgxj62r/bin
+GDBSERVER_EXEC_NAME=gdbserver
