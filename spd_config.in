@@ -1,0 +1,110 @@
+#===========
+# This file contains the main variables that can be customized for 
+# a specific execution or code.
+# NOTE: some of the content of this file may be overwritten by a 
+# .spdrc file that may contain a subset of the var, like gdb and gdbserver.
+
+#===========
+# General variables
+
+# Default (useful for debugging)
+# Grid P x Q
+P=1
+Q=2
+
+# Subset of ranks to consider
+RANK_LIST=()
+
+# Turn on the dev mode that disables the execution on the commands 
+# for the master and the panes.
+DEV_MODE=$FALSE
+
+# Internal flag that allows us to get prints with the execution of the cmd.
+# It is different to DEV_MODE.
+VERBOSE=${FALSE}
+
+#===========
+# Some paths
+
+# Path where the tmux session will be created
+SPD_USER_DIR=$HOME/.spd
+
+#===========
+# TMUX related
+
+# Path where the tmux session will be created
+SPD_USER_TMUX_TMPDIR=${SPD_USER_DIR}/tmux_spd_session
+
+# Name of the tmux session created
+SPD_TMUX_SESSION_NAME=spd
+
+#===========
+# Display
+
+# Number of rows per page
+NROW_PER_PAGE=2
+
+# Size reserved for the master pane
+MASTER_PANE_SIZE=30
+
+#===========
+#===========
+# CORE
+#===========
+#===========
+
+# The default behaviour of the application. Could be:
+# - gdb,    launch gdb for each rank
+# - split,  split the output of each rank
+#PANE_MODE="gdb"
+PANE_MODE="split"
+
+#===============
+# GDB part
+
+# NOTE: Since gdb does not work properly on Summit,
+# we force to use cuda-gdb instead
+# Define which gdbserver to use alongwith its path and params
+GDB_BIN=${CUDA_ROOT}/bin
+GDB_EXEC_NAME=cuda-gdb
+GDB_PARAMS="--cuda-use-lockfile=0 -ex "\'"set cuda memcheck on"\'""
+
+# Define which gdbserver to use alongwith its path and params
+GDBSERVER_BIN=${CUDA_ROOT}/bin
+GDBSERVER_EXEC_NAME=cuda-gdbserver
+GDBSERVER_PARAMS="--cuda-use-lockfile=0"
+
+# USER may define the command to launch gdb on panes
+# SPD_GDB_CMD=""
+
+# Extra parameters passed to the gdb command
+GDB_ADDITIONAL_CMD=""
+
+# Time waited after the submission of the creation of the gdbserver
+SPD_GDBSERVER_WAITING_TIME=2
+
+# Port used to connect gdb to the gdbserver
+PORT=60000
+
+#===============
+# Split part
+
+# Time waited between some steps (subject to changes)
+SPD_WAITING_TIME=2
+
+# Location where the pipes will be created and read
+SPD_PIPE_FOLDER=${SPD_USER_DIR}/local_fifos
+
+# USER may define the command to listen on the pipe
+# NOTE: the pipe is named ${pane_pipe}
+# SPD_PIPE_LISTENING_CMD=""
+
+#--------------------------------------------------------------------------
+# EXTRA
+
+# Python binary to use
+PYTHON_BIN=python3
+
+# XXX Features not checked
+REARRANGE_GRID=$FALSE
+PAGING=$FALSE
