@@ -8,6 +8,7 @@ split_output=$FALSE
 
 DEV_MODE=$TRUE
 DEV_MODE=$FALSE
+VERBOSE=${TRUE}
 
 main() {
   local input_params=$@
@@ -16,22 +17,21 @@ main() {
   
   parse_param ${input_params[@]}
 
-
   if [ ${START_SERVER} -eq ${TRUE} ]; then
-    local gdb_port=$(( PORT + ${world_rank} ))
-    decho "GDB server for rank ${world_rank} available on port ${gdb_port}"
+    local gdb_port=$(( PORT + ${WORLD_RANK} ))
+    decho "GDB server for rank ${WORLD_RANK} available on port ${gdb_port}"
     decho "exec ${GDBSERVER_BIN} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}"
     if [ "${DEV_MODE}" -eq "${FALSE}" ]; then
-      exec ${GDBSERVER_BIN} ${GDBSERVER_PARAMS} :${GDB_PORT} ${CMD}
+      exec ${GDBSERVER_BIN} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}
     fi
   else
     local fifo_pane_id=1 # = stdout
     if [ ${SPLIT_OUTPUT} -eq ${TRUE} ]; then
       # Assuming that the pipe already exists.
-      fifo_pane_id=${LOCAL_FIFOS}/fifo_${world_rank}
+      fifo_pane_id=${LOCAL_FIFOS}/fifo_${WORLD_RANK}
     fi
     
-    decho "[${world_rank}] execute: ${CMD} > ${fifo_pane_id} 2>&1"
+    decho "[${WORLD_RANK}] execute: ${CMD} > ${fifo_pane_id} 2>&1"
     if [ "${DEV_MODE}" -eq "${FALSE}" ]; then
       exec ${CMD} > ${fifo_pane_id} 2>&1
     fi
@@ -43,7 +43,8 @@ main() {
 ################################################################################
 
 function decho(){
-  if [ "${DEV_MODE}" -eq "${TRUE}" ]; then
+  if [ "${DEV_MODE:-${FALSE}}" -eq "${TRUE}" \
+    -o "${VERBOSE:-${FALSE}}" -eq "${TRUE}" ]; then
     echo "$@"
   fi 
 }
