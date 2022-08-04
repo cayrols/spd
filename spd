@@ -43,21 +43,8 @@ main() {
   SPD_ROOT=$( dirname ${BASH_SOURCE[0]} )
   decho "SPD_ROOT: ${SPD_ROOT}"
 
-  # List of potential spd_config.in ORDERED
-  config_files=( ./spd_config.in $HOME/.spd/spd_config.in $SPD_ROOT/spd_config.in )
-  for config_file in ${config_files[@]}; do
-    if [ -e ${config_file} ]; then
-      echo "Source config file ${config_file}"
-      source ${config_file}
-      local errCode=$?
-      if [ ${errCode} -ne 0 ]; then
-        warning "Failed to source ${config_files} with errCode ${errCode}." \
-          "Try the next one."
-      else
-        break
-      fi
-    fi
-  done
+  source_config_and_rc_files
+
   # Check the main internal folder exists
   if [ ! -e ${SPD_USER_DIR} ]; then
     echo "Creation of the user root for temporarly ${SPD_USER_DIR}"
@@ -215,9 +202,12 @@ set -e
     decho "Rows to display: ${rowToDisplay[@]}"
     display_panes_in_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${nrowDisplayed} \
       ${npaneDisplayed} ${rowToDisplay[@]}
+    cur_npane_displayed=${_RETVAL}
+    # Cleaning
+    unset _RETVAL
 
     nrowDisplayed=$(( nrowDisplayed + ${#rowToDisplay[@]} ))
-    npaneDisplayed=$(( npaneDisplayed + CUR_NPANE_DISPLAYED ))
+    npaneDisplayed=$(( npaneDisplayed + cur_npane_displayed ))
 
     setup_window_panes ${SPD_TMUX_SESSION_NAME} ${window_id} ${rowToDisplay[@]}
   done
@@ -420,7 +410,7 @@ parse_param() {
         ;;
       --gdbaddcmd)
         shift
-        GDB_ADDITIONAL_CMD="$1"
+        GDB_ADDITIONAL_CMD+=" $1"
         shift
         ;;
      #--attach)
@@ -461,6 +451,47 @@ parse_param() {
         shift
         ;;
     esac
+  done
+}
+
+source_config_and_rc_files() {
+  local desc="This function loads config_spd and may load .spdrc file."
+  local config_files=( )
+  local rc_files=( )
+
+  # List of potential spd_config.in ORDERED
+  config_files=(  ./spd_config.in )
+  config_files+=( $HOME/.spd/spd_config.in )
+  config_files+=( $SPD_ROOT/spd_config.in )
+  for config_file in ${config_files[@]}; do
+    if [ -e ${config_file} ]; then
+      echo "Source config file ${config_file}"
+      source ${config_file}
+      local errCode=$?
+      if [ ${errCode} -ne 0 ]; then
+        warning "Failed to source ${config_files} with errCode ${errCode}." \
+          "Try the next one."
+      else
+        break
+      fi
+    fi
+  done
+
+  # List of potential spd_config.in ORDERED
+  rc_files=(  ./.spdrc )
+  rc_files+=( $HOME/.spdrc )
+  for rc_file in ${rc_files[@]}; do
+    if [ -e ${rc_file} ]; then
+      echo "Source rc file ${rc_file}"
+      source ${rc_file}
+      local errCode=$?
+      if [ ${errCode} -ne 0 ]; then
+        warning "Failed to source ${rc_files} with errCode ${errCode}." \
+          "Try the next one."
+      else
+        break
+      fi
+    fi
   done
 }
 
@@ -596,7 +627,7 @@ setup_pane_with_gdb() {
   default_cmd+="-ex "\'"target remote ${host}:${port}"\'" "
   default_cmd+="${GDB_ADDITIONAL_CMD} --args ${EXEC_NAME}"
 
-  cmd=${SPD_PIPE_GDB_CMD:-${default_cmd}}
+  cmd=${SPD_GDB_CMD:-${default_cmd}}
 
   send_cmd_to_pane ${pane_id} ${cmd}
 }
@@ -685,9 +716,8 @@ display_panes_in_window(){
     done
   done
 
-  # XXX Should it be _RETVAL instead?
-  CUR_NPANE_DISPLAYED=${nlpane_created}
-  decho "Returned cur_npane_displayed:${CUR_NPANE_DISPLAYED}"
+  decho "Returned nlpane_created:${nlpane_created}"
+  _RETVAL=${nlpane_created}
 }
 
 setup_window_panes(){
@@ -724,7 +754,7 @@ setup_window_panes(){
       if [ ${PANE_MODE} == "split" ]; then
         setup_pane_using_pipe ${pane_idx} ${pane_rank}
       elif [ ${PANE_MODE} == "gdb" ]; then 
-        setup_pane_with_gdb ${pane_idx} ${HOSTS[0]} ${pane_port} # FIXME host
+        setup_pane_with_gdb ${pane_idx} ${HOSTS[ ${p} ]} ${pane_port}
       fi
     done
   done
@@ -827,7 +857,7 @@ create_sparse_grid() {
   local lpane_id=()
   local lpane_ancestor_id=()
   local lpane_rank=()
-  local nval=0 #XXX change it to 1 so that the pane_id is the correct one.
+  local nval=0
   local size=$(( nrow * ncol ))
   local cur_rank=0
 

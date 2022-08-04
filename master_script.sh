@@ -9,6 +9,7 @@ SPLIT_OUTPUT=$FALSE
 DEV_MODE=$TRUE
 DEV_MODE=$FALSE
 VERBOSE=${TRUE}
+VERBOSE=${FALSE}
 
 main() {
   local input_params=$@
@@ -176,7 +177,6 @@ function parse_param(){
         ;;
       --pipe_dir)
         shift
-        LOCAL_FIFOS=$HOME/.spd/local_fifos # XXX move it
         LOCAL_FIFOS=$1
         shift
         ;;
