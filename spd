@@ -11,8 +11,6 @@ set -euo pipefail
 TRUE=1
 FALSE=0
 
-source ./spd_config.in
-
 #-------------------
 # Codes retuned when:
 # A pipe cannot be created
@@ -39,6 +37,25 @@ main() {
   #================
   # Init the env
   #================
+  # Determine the root of the script
+  SPD_ROOT=$( dirname ${BASH_SOURCE[0]} )
+  decho "SPD_ROOT: ${SPD_ROOT}"
+
+  # List of potential spd_config.in ORDERED
+  config_files=( ./spd_config.in $HOME/.spd/spd_config.in $SPD_ROOT/spd_config.in )
+  for config_file in ${config_files[@]}; do
+    if [ -e ${config_file} ]; then
+      echo "Source config file ${config_file}"
+      source ${config_file}
+      local errCode=$?
+      if [ ${errCode} -ne 0 ]; then
+        warning "Failed to source ${config_files} with errCode ${errCode}." \
+          "Try the next one."
+      else
+        break
+      fi
+    fi
+  done
   # Check the main internal folder exists
   if [ ! -e ${SPD_USER_DIR} ]; then
     echo "Creation of the user root for temporarly ${SPD_USER_DIR}"
@@ -197,16 +214,7 @@ set -e
   #================
   step "Launch the parallel execution"
 
-  #create the server
-  MASTER_CMD="${PGDB_BIN}/split_output.sh" # FIXME
-
-  # Select the ranks to debug
-  if [ ${#RANK_LIST[@]} -gt 0 ]; then
-    local raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
-    MASTER_CMD+=" --debuggingRanks ${raw_rank_list}"
-  fi
-  MASTER_CMD+=" --run"
-  MASTER_CMD=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${MASTER_CMD} &:" )
+  set_master_cmd
 
   echo -e "\nWait for the creation of the panes: $SPD_WAITING_TIME s"
   sleep $SPD_WAITING_TIME
@@ -231,7 +239,8 @@ bold() {
 decho() {
   local desc="This function prints the given parameters only if dev_mode is on."
 
-  if [ "${DEV_MODE}" -eq "${TRUE}" -o "${VERBOSE}" -eq "${TRUE}" ]; then
+  if [ "${DEV_MODE:-${FALSE}}" -eq "${TRUE}" \
+    -o "${VERBOSE:-${FALSE}}" -eq "${TRUE}" ]; then
     echo "$@"
   fi 
 }
@@ -461,7 +470,7 @@ create_pane() {
 
   local cmd="bash"
 
-  decho "Paren_pane_id: ${parent_pane_id}, " \
+  decho "Parent_pane_id: ${parent_pane_id}, " \
     "Orientation: ${orientation}, Size: ${pane_size}"
   
   echo "${TMUX_CMD} splitw -${orientation} -p ${pane_size} " \
@@ -852,6 +861,24 @@ compute_list_rows_to_display() {
 
   # Returned value
   _RETVAL=( ${lrow_to_display[@]} )
+}
+
+#-----------------
+# Command management
+set_master_cmd() {
+  local desc="This function sets the global variable MASTER_CMD."
+  local raw_rank_list=""
+
+  #create the server
+  MASTER_CMD="${PGDB_BIN}/split_output.sh" # FIXME
+
+  # Select the ranks to debug
+  if [ ${#RANK_LIST[@]} -gt 0 ]; then
+    raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
+    MASTER_CMD+=" --debuggingRanks ${raw_rank_list}"
+  fi
+  MASTER_CMD+=" --run"
+  MASTER_CMD=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${MASTER_CMD} &:" )
 }
 
 main "$@"
