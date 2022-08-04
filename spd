@@ -13,10 +13,12 @@ FALSE=0
 
 #-------------------
 # Codes retuned when:
+# The input MPI params are not working
+ERROR_MPI_PARAMS=1
 # A pipe cannot be created
-ERROR_PIPE=1
+ERROR_PIPE=2
 # A command cannot be sent to a pane
-ERROR_SEND_CMD=2
+ERROR_SEND_CMD=3
 
 #Pane orientation choices
 VERTICAL=v
@@ -83,6 +85,10 @@ main() {
   echo "Execution      : grid ${P}x${Q}"
   echo "MPI parameters : ${mpi_param}"
   echo "Exec parameters: ${exec_param}"
+
+  ${mpi_param} hostname >/dev/null 2>&1 \
+    || error "The MPI parameters given in input cannot be used." \
+        ${ERROR_MPI_PARAMS}
 
   #================
   # Detect the hosts
@@ -255,15 +261,12 @@ step() {
 # Print error message and can exit if two parameters are given
 # PARAM
 # $1    is the message to be displayed
-# $2    is the exit code (OPTIONAL)
+# $2    is the exit code
 error() {
-  local desc="This function prints an error message and may return."
+  local desc="This function prints an error message."
 
-  echo -e "\n${RED}Error,\t${1-}${NOFORMAT}\n"
-  if [ $# -eq 2 ]; then
-    echo -e "${RED}\t\tSTOP${NOFORMAT}\n"
-    exit $2
-  fi
+  echo -e "\n${RED}Error,\t${1-}${NOFORMAT}"
+  exit $2
 
 }
 
@@ -274,7 +277,7 @@ warning() {
   local desc="This function prints a warning message."
   local msg=$*
 
-  echo -e "${YELLOW}Warning,\t${msg}${NOFORMAT}\n"
+  echo -e "${YELLOW}Warning,\t${msg}${NOFORMAT}"
 }
 
 # Print important message
@@ -285,6 +288,16 @@ important() {
   local msg=$*
 
   echo -e "\n${BLUE}User info,\t${msg}${NOFORMAT}\n"
+}
+
+# Print important message
+# PARAM
+# $1    is the message to be displayed
+tmux_cmd_sent() {
+  local desc="This function prints message related to tmux commands sent."
+  local msg=$*
+
+  echo -e "${CYAN}${msg}${NOFORMAT}"
 }
 
 # Concat elements of an array
@@ -473,7 +486,7 @@ create_pane() {
   decho "Parent_pane_id: ${parent_pane_id}, " \
     "Orientation: ${orientation}, Size: ${pane_size}"
   
-  echo "${TMUX_CMD} splitw -${orientation} -p ${pane_size} " \
+  tmux_cmd_sent "${TMUX_CMD} splitw -${orientation} -p ${pane_size} " \
     "-t ${parent_pane_id} \"${cmd}\""
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
     ${TMUX_CMD} splitw -${orientation} -p ${pane_size} \
@@ -488,7 +501,7 @@ send_cmd_to_pane() {
   shift
   local cmd=$@
 
-  echo "${TMUX_CMD} send-keys -t ${pane_id} \"${cmd}\" Enter"
+  tmux_cmd_sent "${TMUX_CMD} send-keys -t ${pane_id} \"${cmd}\" Enter"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
       ${TMUX_CMD} send-keys -t ${pane_id} "${cmd}" Enter \
         || error "Cannot send cmd ${cmd} to pane ${pane_id}" ${ERROR_SEND_CMD}
