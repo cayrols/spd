@@ -594,11 +594,12 @@ setup_window_panes(){
 
     nlpane_setup=$(( nlpane_setup + nlrank ))
 
-    for q in $( seq 1 ${nlrank} ); do
+    for q in $( seq 0 $((nlrank - 1)) ); do
       # Offset of 1 since now it is not the source but the target
-      pane_idx=$(( ${ROW_PTR[ ${p} ]} + q )) 
-      pane_rank=${PANE_RANK[$(( pane_idx - 1))]} #XXX because offset and bad CSR
-      echo "pane_idx=${pane_idx} pane_rank=${pane_rank}"
+      pane_ptr=$(( ${ROW_PTR[ ${p} ]} + q )) 
+      pane_idx=${PANE_ID[ ${pane_ptr} ]}
+      pane_rank=${PANE_RANK[ ${pane_ptr} ]}
+      decho "pane_idx=${pane_idx} pane_rank=${pane_rank}"
 
       # TODO add switch here to select one mode or another
       setup_pane_using_pipe ${pane_idx} ${pane_rank}
