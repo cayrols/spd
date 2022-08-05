@@ -11,8 +11,8 @@ GDB_MODE=2
 
 DEV_MODE=${TRUE}
 DEV_MODE=${FALSE}
-VERBOSE=${TRUE}
 VERBOSE=${FALSE}
+VERBOSE=${TRUE}
 
 main() {
   local input_params=$@
@@ -87,8 +87,17 @@ parse_param() {
         ;;
       --gdb_params)
         shift
-        GDB_PARAMS=$1
-        shift
+        local raw_params=""
+        local argv=""
+        while [ $# -gt 0 ]; do
+          argv="$1"
+          if [ ${argv} == "--host" -o ${argv} == "--port" -o ${argv} == "--run" ]; then
+            break
+          fi
+          raw_params+=" ${argv}"
+          shift                                                                   
+        done 
+        GDB_PARAMS=${raw_params}
         ;;
       --host)
         shift
@@ -145,7 +154,7 @@ launch_pipe_listening() {
     while true; do 
       echo -e "\n******************* Start run $cpt\n"
       while IFS= read -r line; do
-        if [ ${line} == "__PIPE_STOP__" ]; then
+        if [ "${line}" == "__PIPE_STOP__" ]; then
           break 2
         fi
         echo ${line}
@@ -159,10 +168,12 @@ launch_gdb() {
   local desc="This function starts gdb with the parameters given in input."
   local host=$1
   local port=$2
+  local remote=${host}:${port}
 
-  decho ${GDB_EXEC} ${GDB_PARAMS} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+  # XXX How to pass GDB_ADDITIONAL_CMD?
+  decho ${GDB_EXEC} ${GDB_PARAMS} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD-} --args ${CMD}
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-    ${GDB_EXEC} ${GDB_PARAMS} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+    ${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}'' ${GDB_ADDITIONAL_CMD-} --args ${CMD}
   fi
 }
 
