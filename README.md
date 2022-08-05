@@ -1,22 +1,23 @@
-This script helps to debug distributed applications. It relies on tmux to display
-each rank in a correct manner. No installation are needed except the creation of a `RC file`
+# Split Parallel Debugger (spd)
+This bash script helps to debug distributed applications. It relies on `tmux` to display
+each rank in a correct manner. No installation are needed except maybe the creation of a `RC file`
 which sets the paths and names of different variables and executables.
 
 This script allows the user to use two modes:
 * split
 * gdb
 
-In all cases, a left pane is created and contains the master worker which is
+In all cases, a left pane is created that contains the **master worker** which is
 responsible of the management of the parallel execution.
 
-## split
+### split
 In this mode, the output of each process is redirected in a separated pane.
 
-## gdb
+### gdb
 When the script is used, a left pane contains the gdbserver and all stdout messages.
 The right part will contain all ranks with all gdb, one gdb per rank.
 
-## Execution
+## General execution
 
 In substance, the script creates a tmux session called `spd`, focuses on it if other tmux
 sessions exist. If so, the user has to **detach** in order to resume.
@@ -24,29 +25,35 @@ Then the scripts creates either:
 * a pane per rank, waits a few seconds and then the master
 * the gdbserver, waits a few seconds and then creates a pane per rank.
 
-# Install
-Clone the repo and move inside. No installation needed except the creation of a `RC file`.
+# Installation
+Clone the repo and move inside. No installation needed except maybe the creation of the RC file `.spdrc` in your `$HOME` directory.
+
+Also, you may add the path of the repo into your `PATH` environment variable:
+```
+export PATH+=:<path_of_the_repo>
+```
 
 ### RC file
 In order to setup the environment correctly, we provide a few examples for different
 plateforms in the folder `rc_files`.
 
-Make a copy of one of them into your $HOME, and rename it .spdrc as follow:
+Make a copy of one of them into your $HOME, and rename it `.spdrc` as follow:
 ```
 cp rc_files/spdrc_<machine_name> $HOME/.spdrc
 ```
 
 Then update it as needed.
-**Remark** By default, without `RC file`, only the `config_spd.in` file is read
-which sets `gdb` and `gdbserver` to the default, i.e., gdb and gdbserver.
+
+**Remark 1** By default, without `RC file`, only the `config_spd.in` file is read
+which sets `gdb` and `gdbserver` to the default, i.e., gdb and gdbserver available on the system.
 
 **Remark 2** We note that on some machines the GNU `gdb`/`gdbserver` do not work properly when reading the symbols.
 We then switch to `cuda-gdb`/`cuda-gdbserver`.
 
-## Environment
-We use the tmux software to display and manage the different modes of execution.
-We recommand `tmux/3.1b` as we are mainly using it. It does not mean it does not work
-with another version, just no guarantee.
+# Environment
+We use the `tmux` software to display and manage the different modes of execution.
+We recommand `tmux/3.1b` as we are basically using it for development.
+It does not mean this script does not work with another version, just no guarantee.
 
 ### Some tmux commands
 Tmux uses a prefix key, which is by default `Ctrl-b`.
@@ -61,7 +68,7 @@ Tmux uses a prefix key, which is by default `Ctrl-b`.
   * `Ctrl-b : kill-pane -a -t 0`
 
 # Usage
-The classical way of using it is by considering the following standard way of execution:
+The classical way of using it is by considering the following standard way of execution of a parallel execution:
 ```
 mpirun -n 4 ./exec_name <params_list>
 ```
@@ -74,12 +81,14 @@ spd -p 1 -q 4 --exec ./exec_name --run mpirun -n 4 ./exec_name <params_list>
 The command above will create four panes and separate the output of each rank.
 
 This command line works as follow:
-* -p is the number of nodes
-* -q is the number of ranks per node
-* --exec is the name of the executable given to mpirun
-* --run corresponds to the mpirun command line that will be executed.
+* *-p* is the number of nodes
+* *-q* is the number of ranks per node
+* *--exec* is the name of the executable given to mpirun **MANDATORY**
+* *--run* corresponds to the mpirun command line that will be executed **MANDATORY**.
 
-Or, imagine one of the rank crashes like a `SIGSEGV`, we can do:
+Or,
+
+imagine one of the ranks crashes, like raising `SIGSEGV`, we can do:
 ```
 spd -p 1 -q 4 --gdb --exec ./exec_name --run mpirun -n 4 ./exec_name <params_list>
 ```
@@ -88,13 +97,13 @@ This command will launch one instance of gdb on each pane and they all connect t
 
 ## Remarks
 Some remarks:
-* For now, we do not parse automatically the command line, so we **need** to provide the name of the executable, with the **EXACT** same syntax as used in mpirun.
-* The flag --run must be the last one relative to spd
+* For now, we do not parse automatically the command line, so we **need** to provide the name of the executable using *--exec*, with the **EXACT** same syntax as used in mpirun.
+* The flag *--run* must be the **last flag** relative to spd
 * It seems (at least on Saturn) even when the flag `--cuda-use-lockfile=0` is used, it is not possible to use cuda-gdb when the number of MPI processes is greater than the number of GPU (at least -n 2 and 1 GPU does not work. Error: gdbserver: Another cuda-gdb instance is working with the lock file. Try again
 
 ## Additional flags
 
-### gdbaddcmd flag
+### *--gdbaddcmd* flag
 Some additional arguments of `spd` can be provided. For example, we can pass 
 gdb commands to all gdb instances, all at once. For that, we use the flag `--gdbaddcmd`, as follow:
 ```
