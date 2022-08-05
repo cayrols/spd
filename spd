@@ -569,6 +569,19 @@ send_cmd_to_pane() {
   fi
 }
 
+setup_pane_env() {
+  local desc="This function exports some values in the env of the pane."
+  local pane_id=$1
+  local pane_rank=$2
+  local pane_host=$3
+  local cmd=""
+
+  cmd+="export "
+  cmd+="SPD_ROOT=${SPD_ROOT} SPD_PIPE_FOLDER=${SPD_PIPE_FOLDER} "
+  cmd+="SPD_PANE_RANK=${pane_rank} SPD_PANE_HOST=${host} "
+  send_cmd_to_pane ${pane_id} ${cmd}
+}
+
 # Link a pipe to a pane and listen on it.
 setup_pane_using_pipe() {
   local desc="This function executes a specific command to a given pane."
@@ -601,11 +614,6 @@ setup_pane_using_pipe() {
     cmd=${SPD_PIPE_LISTENING_CMD:-${default_cmd}}
 
     send_cmd_to_pane ${pane_id} ${cmd}
-
-   #echo "${TMUX_CMD} send-keys -t ${pane_id} \"${cmd}\" Enter"
-   #if [ ${DEV_MODE} -eq ${FALSE} ]; then
-   #  ${TMUX_CMD} send-keys -t ${pane_id} "${cmd}" Enter
-   #fi
   fi
 }
 
@@ -665,6 +673,7 @@ display_panes_in_window(){
   local orientation=${HORIZONTAL}
   local nlrank=0
   local host=0
+  local pane_ptr=0
   local pane_idx=0
   local pane_rank=0
   local col_pane_ancestor_id=0
@@ -684,12 +693,14 @@ display_panes_in_window(){
       # Cleaning
       unset _RETVAL
     fi
-    pane_idx=${ROW_PTR[ ${p} ]}
-    pane_rank=${PANE_RANK[ ${pane_idx} ]}
-    col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_idx} ]} - ${row_offset} ))
+    pane_ptr=${ROW_PTR[ ${p} ]}
+    pane_idx=${PANE_ID[ ${pane_ptr} ]}
+    pane_rank=${PANE_RANK[ ${pane_ptr} ]}
+    col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_ptr} ]} - ${row_offset} ))
 
     # This creates the first pane of the current row.
     create_pane $col_pane_ancestor_id $orientation $pane_size
+    setup_pane_env ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
 
     nrow_created=$(( nrow_created + 1 ))
   done
@@ -710,14 +721,16 @@ display_panes_in_window(){
       compute_pane_size ${nlrank} ${q}
      #pane_size=$((100 - 100 / (nlrank - q + 1) ))
       pane_size=${_RETVAL}
-      pane_idx=$(( ${ROW_PTR[ ${p} ]} + q ))
-      pane_rank=${PANE_RANK[ ${pane_idx} ]}
-      col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_idx} ]} - ${pane_offset} ))
-      decho "col_pane_ancestor_id=${PANE_ANCESTOR_ID[$pane_idx]} - ${pane_offset}"
+      pane_ptr=$(( ${ROW_PTR[ ${p} ]} + q ))
+      pane_idx=${PANE_ID[ ${pane_ptr} ]}
+      pane_rank=${PANE_RANK[ ${pane_ptr} ]}
+      col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_ptr} ]} - ${pane_offset} ))
+      decho "col_pane_ancestor_id=${PANE_ANCESTOR_ID[$pane_ptr]} - ${pane_offset}"
       # Cleaning
       unset _RETVAL
 
       create_pane ${col_pane_ancestor_id} ${HORIZONTAL} ${pane_size}
+      setup_pane_env ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
     done
   done
 
@@ -1007,7 +1020,7 @@ start_gdbserver() {
   else
     gdbserver_cmd+=" --gdb"
   fi
-  gdbserver_cmd+=" --server_bin ${gdbserver_exec}"
+  gdbserver_cmd+=" --server_exec ${gdbserver_exec}"
   if [ ! -z "${GDBSERVER_PARAMS}" ]; then
     gdbserver_cmd+=" --server_params ${GDBSERVER_PARAMS}"
   fi

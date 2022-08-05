@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Used to avoid errors when executed.
+set -euo pipefail
+
 TRUE=1
 FALSE=0
 
@@ -21,12 +24,12 @@ main() {
   if [ ${START_SERVER} -eq ${TRUE} ]; then
     local gdb_port=$(( PORT + ${WORLD_RANK} ))
     decho "GDB server for rank ${WORLD_RANK} available on port ${gdb_port}"
-    decho "exec ${GDBSERVER_BIN} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}"
+    decho "exec ${GDBSERVER_EXEC} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}"
     if [ "${DEV_MODE}" -eq "${FALSE}" ]; then
-      exec ${GDBSERVER_BIN} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}
+      exec ${GDBSERVER_EXEC} ${GDBSERVER_PARAMS} :${gdb_port} ${CMD}
     fi
   else
-    local fifo_pane_id=1 # = stdout
+    local fifo_pane_id=/dev/fd/1 # = stdout
     if [ ${SPLIT_OUTPUT} -eq ${TRUE} ]; then
       # Assuming that the pipe already exists.
       fifo_pane_id=${LOCAL_FIFOS}/fifo_${WORLD_RANK}
@@ -43,7 +46,7 @@ main() {
 #                                  FUNCTIONS                                  #
 ################################################################################
 
-function decho(){
+decho() {
   if [ "${DEV_MODE:-${FALSE}}" -eq "${TRUE}" \
     -o "${VERBOSE:-${FALSE}}" -eq "${TRUE}" ]; then
     echo "$@"
@@ -52,7 +55,7 @@ function decho(){
 
 # This function seeks on the possible patterns in the env to extract the
 # world rank.
-function get_world_rank() {
+get_world_rank() {
   local desc="This functions returns the world rank obtained from printenv."
   local possible_patterns=( OMPI_COMM_WORLD_RANK PMI_RANK )
   local output=$( printenv | grep RANK )
@@ -80,7 +83,7 @@ function get_world_rank() {
   fi
 }
 
-function chelp(){
+chelp() {
   bold "TODO FINISH IT"
   bold "TODO FINISH IT"
   bold "TODO FINISH IT"
@@ -109,7 +112,7 @@ function chelp(){
   bold    "OPTIONS"
 }
 
-function parse_param(){
+parse_param() {
   local desc="Parse the input parameters. WARNING:"
     desc+="Order matters here?"
   while [ $# -gt 0 ]; do
@@ -130,15 +133,12 @@ function parse_param(){
         ;;
       --debuggingRanks)
         shift
-        START_SERVER=$FALSE
         ranks=( $( echo $1 | tr -s ',' ' ' ) )
 
         # Check whether world_rank is in the list
         for rank in ${ranks[@]}; do
           if [ ${rank} -eq ${WORLD_RANK} ]; then
             START_SERVER=$TRUE
-            # Disable it
-            SPLIT_OUTPUT=$FALSE
             break;
           fi
         done
@@ -146,23 +146,20 @@ function parse_param(){
         ;;
       --splittingRanks)
         shift
-        START_SERVER=$FALSE
         ranks=( $( echo $1 | tr -s ',' ' ' ) )
 
         # Check whether world_rank is in the list
         for rank in ${ranks[@]}; do
           if [ ${rank} -eq ${WORLD_RANK} ]; then
             SPLIT_OUTPUT=$TRUE
-            # Disable it
-            START_SERVER=$FALSE
             break;
           fi
         done
         shift
         ;;
-      --server_bin)
+      --server_exec)
         shift
-        GDBSERVER_BIN=$1
+        GDBSERVER_EXEC=$1
         shift
         ;;
       --server_params)
