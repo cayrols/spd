@@ -57,6 +57,20 @@ main() {
   fi
   setup_output_format
 
+  if [ ! -z "${GDB_BIN}" ]; then
+    GDB_EXEC=${GDB_BIN}/${GDB_EXEC_NAME}
+  else
+    warning "TODO add checker for gdb"
+    GDB_EXEC=${GDB_EXEC_NAME}
+  fi
+
+  if [ ! -z "${GDBSERVER_BIN}" ]; then
+    GDBSERVER_EXEC=${GDBSERVER_BIN}/${GDBSERVER_EXEC_NAME}
+  else
+    warning "TODO Add checker for gdbserver"
+    GDBSERVER_EXEC=${GDBSERVER_EXEC_NAME}
+  fi
+
   #================
   # Parse the input parameters and extract info
   #================
@@ -136,6 +150,9 @@ set -e
   #================
   # Launch the execution
   #================
+  # Export some var in the env of the master
+  setup_pane_env ${MASTER_PANE} 0 -1
+
   if [ ${PANE_MODE} == "gdb" ]; then
     start_gdbserver
   fi
@@ -578,7 +595,11 @@ setup_pane_env() {
 
   cmd+="export "
   cmd+="SPD_ROOT=${SPD_ROOT} SPD_PIPE_FOLDER=${SPD_PIPE_FOLDER} "
-  cmd+="SPD_PANE_RANK=${pane_rank} SPD_PANE_HOST=${host} "
+  cmd+="SPD_PANE_RANK=${pane_rank} SPD_PANE_HOST=${pane_host} "
+  cmd+="SPD_PANE_PORT=$(( PORT + pane_rank )) "
+  cmd+="SPD_GDB_EXEC=${GDB_EXEC} SPD_GDB_PARAMS=\"${GDB_PARAMS}\" "
+  cmd+="SPD_GDBSERVER_EXEC=${GDBSERVER_EXEC} SPD_GDBSERVER_PARAMS=${GDBSERVER_PARAMS}"
+
   send_cmd_to_pane ${pane_id} ${cmd}
 }
 
@@ -623,20 +644,12 @@ setup_pane_with_gdb() {
   local pane_id=$1
   local host=$2
   local port=$3
-  local gdb_exec=""
   local cmd=""
   local default_cmd=""
 
   decho "Pane_id:${pane_id}, Host:${host}, Port:${port}"
-
-  if [ ! -z "${GDB_BIN}" ]; then
-    gdb_exec=${GDB_BIN}/${GDB_EXEC_NAME}
-  else
-    warning "TODO add checker for gdb"
-    gdb_exec=${GDB_EXEC_NAME}
-  fi
   
-  default_cmd="${gdb_exec} ${GDB_PARAMS} "
+  default_cmd="${GDB_EXEC} ${GDB_PARAMS} "
   default_cmd+="-ex "\'"target remote ${host}:${port}"\'" "
   default_cmd+="${GDB_ADDITIONAL_CMD} --args ${EXEC_NAME}"
 
@@ -982,8 +995,8 @@ start_master() {
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
     master_cmd+=" --splittingRanks ${raw_rank_list}"
-  else
-    master_cmd+=" --split"
+ #else
+ #  master_cmd+=" --split"
   fi
   master_cmd+=" --pipe_dir ${SPD_PIPE_FOLDER}"
   master_cmd+=" --run"
@@ -999,16 +1012,8 @@ start_gdbserver() {
   local master_cmd=""
   local gdbserver_cmd=""
   local raw_rank_list=""
-  local gdbserver_exec=""
 
   step "Creation of the gdbserver"
-
-  if [ ! -z "${GDBSERVER_BIN}" ]; then
-    gdbserver_exec=${GDBSERVER_BIN}/${GDBSERVER_EXEC_NAME}
-  else
-    warning "TODO Add checker for gdbserver"
-    gdbserver_exec=${GDBSERVER_EXEC_NAME}
-  fi
 
   #create the server
   gdbserver_cmd="${SPD_ROOT}/master_script.sh"
@@ -1020,7 +1025,7 @@ start_gdbserver() {
   else
     gdbserver_cmd+=" --gdb"
   fi
-  gdbserver_cmd+=" --server_exec ${gdbserver_exec}"
+  gdbserver_cmd+=" --server_exec ${GDBSERVER_EXEC}"
   if [ ! -z "${GDBSERVER_PARAMS}" ]; then
     gdbserver_cmd+=" --server_params ${GDBSERVER_PARAMS}"
   fi
