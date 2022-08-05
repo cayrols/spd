@@ -101,6 +101,7 @@ main() {
 
   # Check that tmux session already exists
   echo "Checking session ${SPD_TMUX_SESSION_NAME}"
+  # XXX Remove when script okay
 set +e
   ${TMUX_CMD} has-session -t ${SPD_TMUX_SESSION_NAME} 2>/dev/null
   local tmux_exist=$?
@@ -219,9 +220,13 @@ set -e
     start_master
   fi
 
-  # Notify the user the command to attach to the session
-  important "To attach to the session ${SPD_TMUX_SESSION_NAME}:" \
-    "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
+  if [ ${FORCE_ATTACH} -eq ${TRUE} ]; then
+    ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+  else
+    # Notify the user the command to attach to the session
+    important "To attach to the session ${SPD_TMUX_SESSION_NAME}:" \
+      "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
+  fi
 }
 
 ################################################################################

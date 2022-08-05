@@ -100,6 +100,9 @@ SPD_PIPE_FOLDER=${SPD_USER_DIR}/local_fifos
 #--------------------------------------------------------------------------
 # EXTRA
 
+# Control whether the user is attached to the TMUX session
+FORCE_ATTACH=${FALSE}
+
 # Python binary to use
 PYTHON_BIN=python3
 
