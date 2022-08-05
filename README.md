@@ -18,10 +18,11 @@ The right part will contain all ranks with all gdb, one gdb per rank.
 
 ## Execution
 
-In substance, the script creates a tmux session called debug, focuses on it if other tmux
+In substance, the script creates a tmux session called `spd`, focuses on it if other tmux
 sessions exist. If so, the user has to **detach** in order to resume.
-Then the scripts creates the gdbserver, waits a few seconds and then creates
-a pane per rank.
+Then the scripts creates either:
+* a pane per rank, waits a few seconds and then the master
+* the gdbserver, waits a few seconds and then creates a pane per rank.
 
 # Install
 Clone the repo and move inside. No installation needed except the creation of a `RC file`.
