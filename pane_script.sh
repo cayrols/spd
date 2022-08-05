@@ -17,6 +17,8 @@ VERBOSE=${TRUE}
 main() {
   local input_params=$@
   local pipe=/dev/fd/1
+
+  read_env
   
   parse_param ${input_params[@]}
   
@@ -138,6 +140,16 @@ parse_param() {
         ;;
     esac
   done
+}
+
+read_env() {
+  GDB_EXEC=${SPD_GDB_EXEC}
+  GDB_PARAMS="${SPD_GDB_PARAMS}"
+  PORT=${SPD_PANE_PORT}
+  HOST=${SPD_PANE_HOST}
+
+  LOCAL_FIFOS=${SPD_PIPE_FOLDER}
+  PIPE_ID=${SPD_PANE_RANK}
 }
 
 launch_pipe_listening() {

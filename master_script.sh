@@ -17,6 +17,8 @@ VERBOSE=${FALSE}
 main() {
   local input_params=$@
 
+  read_env
+
   get_world_rank
   
   parse_param ${input_params[@]}
@@ -194,6 +196,14 @@ parse_param() {
   done
 
   # TODO check required params
+}
+
+read_env() {
+  GDBSERVER_EXEC=${SPD_GDBSERVER_EXEC}
+  GDBSERVER_PARAMS="${SPD_GDBSERVER_PARAMS}"
+  HOST=${SPD_PANE_HOST}
+
+  LOCAL_FIFOS=${SPD_PIPE_FOLDER}
 }
 
 main "$@"
