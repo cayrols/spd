@@ -19,6 +19,8 @@ ERROR_MPI_PARAMS=1
 ERROR_PIPE=2
 # A command cannot be sent to a pane
 ERROR_SEND_CMD=3
+# The requested mode for the master is incorrect
+ERROR_PANE_MODE=4
 
 #Pane orientation choices
 VERTICAL=v
@@ -29,6 +31,10 @@ DEFAULT_PAGING=${FALSE}
 
 # Define the master pane id
 MASTER_PANE=0
+# Define the master window id
+MASTER_WINDOW=0
+MASTER_RANK=0
+MASTER_HOST=NONE
 
 main() {
   local desc="This function is the main function."
@@ -111,7 +117,11 @@ main() {
   # Manage TMUX
   #================
   step "Gestion of the tmux"
-  TMUX_CMD="tmux -S ${SPD_USER_TMUX_TMPDIR}"
+  if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
+    TMUX_CMD="tmux -S ${SPD_USER_TMUX_TMPDIR}"
+  else
+    TMUX_CMD="tmux"
+  fi
 
   # Check that tmux session already exists
   echo "Checking session ${SPD_TMUX_SESSION_NAME}"
@@ -122,6 +132,8 @@ set +e
 set -e
   if [ ${tmux_exist} -eq 1 ]; then
     echo "Creation of the tmux session named '${SPD_TMUX_SESSION_NAME}'"
+    decho ${TMUX_CMD} new -s ${SPD_TMUX_SESSION_NAME} \
+      -d -x "$(tput cols)" -y "$(tput lines)"
     ${TMUX_CMD} new -s ${SPD_TMUX_SESSION_NAME} \
       -d -x "$(tput cols)" -y "$(tput lines)"
   else
@@ -131,7 +143,12 @@ set -e
     local tmux_nsession=$( ${TMUX_CMD} ls | wc -l )
     echo "#sessions: ${tmux_nsession}"
     if [ ${tmux_nsession} -gt 1 ]; then
-      ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+      if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
+        ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+      else
+        ${TMUX_CMD} switch-client -t ${SPD_TMUX_SESSION_NAME}
+       #sleep 2
+      fi
     fi
   fi
 
@@ -151,10 +168,14 @@ set -e
   # Launch the execution
   #================
   # Export some var in the env of the master
-  setup_pane_env ${MASTER_PANE} 0 -1
+  setup_pane_env ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} ${MASTER_PANE} ${MASTER_RANK} ${MASTER_HOST}
 
   if [ ${PANE_MODE} == "gdb" ]; then
     start_gdbserver
+  elif [ ${PANE_MODE} == "split" ]; then
+    start_master
+  else
+    error "Unknown PANE_MODE ${PANE_MODE}" ${ERROR_PANE_MODE}
   fi
 
   #================
@@ -233,16 +254,22 @@ set -e
   #================
   # Launch the execution
   #================
-  if [ ${PANE_MODE} == "split" ]; then
-    start_master
-  fi
 
   if [ ${FORCE_ATTACH} -eq ${TRUE} ]; then
-    ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+    if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
+      ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+    else
+      ${TMUX_CMD} switch-client -t ${SPD_TMUX_SESSION_NAME}
+    fi
   else
     # Notify the user the command to attach to the session
-    important "To attach to the session ${SPD_TMUX_SESSION_NAME}:" \
-      "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
+    if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
+      important "To attach to the session ${SPD_TMUX_SESSION_NAME}:" \
+        "\t${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}"
+    else
+      important "To switch to the session, select ${SPD_TMUX_SESSION_NAME}" \
+        " in the menu appearing when typing <prefix> s"
+    fi
   fi
 }
 
@@ -532,6 +559,7 @@ create_window() {
   decho "Creation of window id:${window_id} named ${window_name[@]}"\
     " in Session ${tmux_session}"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
+    decho $TMUX_CMD new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
     $TMUX_CMD new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
   fi
 }
@@ -544,6 +572,7 @@ select_window() {
 
   decho "Selection of window id:${window_id} in Session ${tmux_session}"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
+    decho $TMUX_CMD select-window -t ${tmux_session}:${window_id}
     $TMUX_CMD select-window -t ${tmux_session}:${window_id}
   fi
 }
@@ -555,9 +584,11 @@ select_window() {
 create_pane() {
   local desc="This function splits an existing pane to get a new pane."
     desc+="It also starts a bash in the new pane."
-  local parent_pane_id=$1
-  local orientation=$2
-  local pane_size=$3
+  local tmux_session=$1
+  local window_id=$2
+  local parent_pane_id=$3
+  local orientation=$4
+  local pane_size=$5
 
   local cmd="bash"
 
@@ -565,32 +596,36 @@ create_pane() {
     "Orientation: ${orientation}, Size: ${pane_size}"
   
   tmux_cmd_sent "${TMUX_CMD} splitw -${orientation} -p ${pane_size} " \
-    "-t ${parent_pane_id} \"${cmd}\""
+    "-t ${tmux_session}:${window_id}.${parent_pane_id} \"${cmd}\""
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
     ${TMUX_CMD} splitw -${orientation} -p ${pane_size} \
-      -t ${parent_pane_id} "${cmd}"
+      -t ${tmux_session}:${window_id}.${parent_pane_id} "${cmd}"
   fi
 }
 
 # Wrapper over tmux command to send a command to a specific pane.
 send_cmd_to_pane() {
   local desc="This function sends a command to a specific pane."
-  local pane_id=$1
-  shift
+  local tmux_session=$1
+  local window_id=$2
+  local pane_id=$3
+  shift 3
   local cmd=$@
 
-  tmux_cmd_sent "${TMUX_CMD} send-keys -t ${pane_id} \"\n${cmd}\n\" Enter"
+  tmux_cmd_sent "${TMUX_CMD} send-keys -t ${tmux_session}:${window_id}.${pane_id} \"\n${cmd}\n\" Enter"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-      ${TMUX_CMD} send-keys -t ${pane_id} "${cmd}" Enter \
-        || error "Cannot send cmd ${cmd} to pane ${pane_id}" ${ERROR_SEND_CMD}
+      ${TMUX_CMD} send-keys -t ${tmux_session}:${window_id}.${pane_id} "${cmd}" Enter \
+        || error "Cannot send cmd ${cmd} to pane ${tmux_session}:${window_id}.${pane_id}" ${ERROR_SEND_CMD}
   fi
 }
 
 setup_pane_env() {
   local desc="This function exports some values in the env of the pane."
-  local pane_id=$1
-  local pane_rank=$2
-  local pane_host=$3
+  local tmux_session=$1
+  local window_id=$2
+  local pane_id=$3
+  local pane_rank=$4
+  local pane_host=$5
   local cmd=""
 
   cmd+="export "
@@ -598,16 +633,20 @@ setup_pane_env() {
   cmd+="SPD_PANE_RANK=${pane_rank} SPD_PANE_HOST=${pane_host} "
   cmd+="SPD_PANE_PORT=$(( PORT + pane_rank )) "
   cmd+="SPD_GDB_EXEC=${GDB_EXEC} SPD_GDB_PARAMS=\"${GDB_PARAMS}\" "
-  cmd+="SPD_GDBSERVER_EXEC=${GDBSERVER_EXEC} SPD_GDBSERVER_PARAMS=${GDBSERVER_PARAMS}"
+  cmd+="SPD_GDB_ADDITIONAL_CMD=\"${GDB_ADDITIONAL_CMD}\" "
+  cmd+="SPD_GDBSERVER_EXEC=${GDBSERVER_EXEC} SPD_GDBSERVER_PARAMS=${GDBSERVER_PARAMS} "
+  cmd+="SPD_USER_EXEC=${EXEC_NAME}"
 
-  send_cmd_to_pane ${pane_id} ${cmd}
+  send_cmd_to_pane ${tmux_session} ${window_id} ${pane_id} ${cmd}
 }
 
 # Link a pipe to a pane and listen on it.
 setup_pane_using_pipe() {
   local desc="This function executes a specific command to a given pane."
-  local pane_id=$1
-  local proc_rank_of_pane=$2
+  local tmux_session=$1
+  local window_id=$2
+  local pane_id=$3
+  local proc_rank_of_pane=$4
   local pane_pipe=${SPD_PIPE_FOLDER}/fifo_${proc_rank_of_pane}
   local cmd=""
   local default_cmd=""
@@ -634,16 +673,18 @@ setup_pane_using_pipe() {
 
     cmd=${SPD_PIPE_LISTENING_CMD:-${default_cmd}}
 
-    send_cmd_to_pane ${pane_id} ${cmd}
+    send_cmd_to_pane ${tmux_session} ${window_id} ${pane_id} ${cmd}
   fi
 }
 
 # Launch gdb in the given pane
 setup_pane_with_gdb() {
   local desc="This function launches gdb and connects it to the gdbserver."
-  local pane_id=$1
-  local host=$2
-  local port=$3
+  local tmux_session=$1
+  local window_id=$2
+  local pane_id=$3
+  local host=$4
+  local port=$5
   local cmd=""
   local default_cmd=""
 
@@ -655,7 +696,7 @@ setup_pane_with_gdb() {
 
   cmd=${SPD_GDB_CMD:-${default_cmd}}
 
-  send_cmd_to_pane ${pane_id} ${cmd}
+  send_cmd_to_pane ${tmux_session} ${window_id} ${pane_id} ${cmd}
 }
 
 compute_pane_size() {
@@ -712,8 +753,8 @@ display_panes_in_window(){
     col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_ptr} ]} - ${row_offset} ))
 
     # This creates the first pane of the current row.
-    create_pane $col_pane_ancestor_id $orientation $pane_size
-    setup_pane_env ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
+    create_pane ${tmux_session} ${window_id} $col_pane_ancestor_id $orientation $pane_size
+    setup_pane_env ${tmux_session} ${window_id} ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
 
     nrow_created=$(( nrow_created + 1 ))
   done
@@ -742,8 +783,8 @@ display_panes_in_window(){
       # Cleaning
       unset _RETVAL
 
-      create_pane ${col_pane_ancestor_id} ${HORIZONTAL} ${pane_size}
-      setup_pane_env ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
+      create_pane ${tmux_session} ${window_id} ${col_pane_ancestor_id} ${HORIZONTAL} ${pane_size}
+      setup_pane_env ${tmux_session} ${window_id} ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
     done
   done
 
@@ -783,9 +824,9 @@ setup_window_panes(){
 
       # TODO add switch here to select one mode or another
       if [ ${PANE_MODE} == "split" ]; then
-        setup_pane_using_pipe ${pane_idx} ${pane_rank}
+        setup_pane_using_pipe ${tmux_session} ${window_id} ${pane_idx} ${pane_rank}
       elif [ ${PANE_MODE} == "gdb" ]; then 
-        setup_pane_with_gdb ${pane_idx} ${HOSTS[ ${p} ]} ${pane_port}
+        setup_pane_with_gdb ${tmux_session} ${window_id} ${pane_idx} ${HOSTS[ ${p} ]} ${pane_port}
       fi
     done
   done
@@ -995,14 +1036,14 @@ start_master() {
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     raw_rank_list=$( concat_array , \"${RANK_LIST[@]}\")
     master_cmd+=" --splittingRanks ${raw_rank_list}"
- #else
- #  master_cmd+=" --split"
+  else
+    master_cmd+=" --split"
   fi
   master_cmd+=" --pipe_dir ${SPD_PIPE_FOLDER}"
   master_cmd+=" --run"
   cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${master_cmd} &:" )
 
-  send_cmd_to_pane ${MASTER_PANE} ${cmd}
+  send_cmd_to_pane ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} ${MASTER_PANE} ${cmd}
 }
 
 #if [ ${ATTACH} -eq ${FALSE} ]; then
@@ -1033,7 +1074,7 @@ start_gdbserver() {
   gdbserver_cmd+=" --run"
   cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${gdbserver_cmd} &:" )
 
-  send_cmd_to_pane ${MASTER_PANE} ${cmd}
+  send_cmd_to_pane ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} ${MASTER_PANE} ${cmd}
 
   echo "Wait for the gdbserver to start: ${SPD_GDBSERVER_WAITING_TIME} s"
   sleep ${SPD_GDBSERVER_WAITING_TIME}
