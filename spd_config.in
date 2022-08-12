@@ -33,10 +33,12 @@ SPD_USER_DIR=$HOME/.spd
 # TMUX related
 
 # Path where the tmux session will be created
-SPD_USER_TMUX_TMPDIR=${SPD_USER_DIR}/tmux_spd_session
+SPD_USER_TMUX_TMPDIR=${SPD_USER_DIR}/tmux_spd_socket
 
 # Name of the tmux session created
 SPD_TMUX_SESSION_NAME=spd
+
+SPD_TMUX_USE_USER_SOCKET=${TRUE}
 
 #===========
 # Display
