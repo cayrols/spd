@@ -141,6 +141,7 @@ parse_param() {
         for rank in ${ranks[@]}; do
           if [ ${rank} -eq ${WORLD_RANK} ]; then
             START_SERVER=$TRUE
+            SPLIT_OUTPUT=$FALSE # Disable
             break;
           fi
         done
@@ -154,6 +155,7 @@ parse_param() {
         for rank in ${ranks[@]}; do
           if [ ${rank} -eq ${WORLD_RANK} ]; then
             SPLIT_OUTPUT=$TRUE
+            START_SERVER=$FALSE # Disable
             break;
           fi
         done
@@ -201,6 +203,7 @@ parse_param() {
 read_env() {
   GDBSERVER_EXEC=${SPD_GDBSERVER_EXEC}
   GDBSERVER_PARAMS="${SPD_GDBSERVER_PARAMS}"
+  PORT=${SPD_PANE_PORT}
   HOST=${SPD_PANE_HOST}
 
   LOCAL_FIFOS=${SPD_PIPE_FOLDER}
