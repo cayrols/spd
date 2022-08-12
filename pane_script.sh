@@ -96,7 +96,7 @@ parse_param() {
           if [ ${argv} == "--host" -o ${argv} == "--port" -o ${argv} == "--run" ]; then
             break
           fi
-          raw_params+=" ${argv}"
+          raw_params+="${argv} "
           shift                                                                   
         done 
         GDB_PARAMS=${raw_params}
@@ -147,6 +147,8 @@ read_env() {
   GDB_PARAMS="${SPD_GDB_PARAMS}"
   PORT=${SPD_PANE_PORT}
   HOST=${SPD_PANE_HOST}
+  CMD=${SPD_USER_EXEC}
+  GDB_ADDITIONAL_CMD="${SPD_GDB_ADDITIONAL_CMD}"
 
   LOCAL_FIFOS=${SPD_PIPE_FOLDER}
   PIPE_ID=${SPD_PANE_RANK}
@@ -183,9 +185,49 @@ launch_gdb() {
   local remote=${host}:${port}
 
   # XXX How to pass GDB_ADDITIONAL_CMD?
-  decho ${GDB_EXEC} ${GDB_PARAMS} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD-} --args ${CMD}
+ #set -x
+ #decho ${GDB_EXEC} ${GDB_PARAMS} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+ #set +x
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-    ${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}'' ${GDB_ADDITIONAL_CMD-} --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}'' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+    ${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}'' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex "target remote '${host}:${port}" ${GDB_ADDITIONAL_CMD} --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex "target remote ${host}:${port}" ${GDB_ADDITIONAL_CMD} --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}'' --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}\' $( echo -en "${GDB_ADDITIONAL_CMD}" ) --args ${CMD}
+   #${GDB_EXEC} ${GDB_PARAMS} -ex 'target remote '${host}:${port}\' -ex 'c' --args ${CMD}
+
+   #${GDB_EXEC} {GDB_PARAMS} --args ${CMD}
+   #${GDB_EXEC} {GDB_PARAMS} -ex 'target remote '${host}:${port}'' --args ${CMD}
+   #local target="target remote ${host}:${port}"
+   #${GDB_EXEC} -ex "\'${target}\'" --args ${CMD}
+   # -ex 'c'
+   #echo ${GDB_EXEC} -ex \''target remote '${host}:${port}''\' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+   #echo -E ${GDB_EXEC} -ex \'"target remote ${host}:${port}"\' ${GDB_ADDITIONAL_CMD} --args ${CMD}
+   #local gdb_cmd="${GDB_EXEC} -ex "\'"target remote ${host}:${port}"\'" --args ${CMD}"
+   #echo ${gdb_cmd}
+   #local default_cmd="${GDB_EXEC} ${GDB_PARAMS} "
+   #default_cmd="${GDB_EXEC} -q "
+   #default_cmd+="-ex "\'"target remote ${host}:${port}"\'" "
+   #default_cmd+="--args ${CMD}"
+   #echo "CMD for gdb:$"default_cmd""
+   #exec $( echo $default_cmd )
+
+  #exec ${GDB_EXEC} $( echo "-ex 'target remote ${host}:${port}' ${GDB_ADDITIONAL_CMD} --args ${CMD}" )
+  #local remote=$'\'target remote ${host}:${port}\''
+  #remote=$"'target remote ${host}:${port}'"
+  #set -x
+  #remote=$( echo $"'target remote ${host}:${port}'" )
+  #echo ${GDB_EXEC} -ex ${remote} --args ${CMD}
+  #${GDB_EXEC} -ex ${remote} --args ${CMD}
+  #exec ${GDB_EXEC} -ex 'target remote leconte.icl.utk.edu:60001' --args ${CMD}
+  #set +x
+  #exec ${GDB_EXEC} -ex ${remote} ${GDB_ADDITIONAL_CMD} --args ${CMD}
+
+   #${GDB_EXEC} -q -ex 'target remote '${host}:${port}'' --args ${CMD}
+   #local remote="-ex \'target remote ${host}:${port}\'"
+   #local remote=$(echo -ne "-ex '$( echo -En $'\'target remote leconte.icl.utk.edu:60001\'' )'" )
+   #${GDB_EXEC} -q ${remote} --args ${CMD}
   fi
 }
 
