@@ -666,7 +666,7 @@ setup_pane_using_pipe() {
     default_cmd+="cpt=0; while true; do "
     default_cmd+="echo -e \"\n******************* Start run \$cpt\n\"; "
     default_cmd+="while IFS= read -r line; do "
-    default_cmd+="echo \$line; "
+    default_cmd+="echo -E \"\$line\"; "
     default_cmd+="done < ${pane_pipe}; "
     default_cmd+="cpt=\$(( cpt + 1)); "
     default_cmd+="done"
