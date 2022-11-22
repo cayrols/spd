@@ -510,8 +510,8 @@ source_config_and_rc_files() {
 
   # List of potential spd_config.in ORDERED
   config_files=(  ./spd_config.in )
-  config_files+=( $HOME/.spd/spd_config.in )
-  config_files+=( $SPD_ROOT/spd_config.in )
+  config_files+=( ${HOME}/.spd/spd_config.in )
+  config_files+=( ${SPD_ROOT}/spd_config.in )
   for config_file in ${config_files[@]}; do
     if [ -e ${config_file} ]; then
       echo "Source config file ${config_file}"
@@ -528,7 +528,7 @@ source_config_and_rc_files() {
 
   # List of potential spd_config.in ORDERED
   rc_files=(  ./.spdrc )
-  rc_files+=( $HOME/.spdrc )
+  rc_files+=( ${HOME}/.spdrc )
   for rc_file in ${rc_files[@]}; do
     if [ -e ${rc_file} ]; then
       echo "Source rc file ${rc_file}"
@@ -559,8 +559,8 @@ create_window() {
   decho "Creation of window id:${window_id} named ${window_name[@]}"\
     " in Session ${tmux_session}"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-    decho $TMUX_CMD new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
-    $TMUX_CMD new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
+    decho ${TMUX_CMD} new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
+    ${TMUX_CMD} new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
   fi
 }
 
@@ -572,8 +572,8 @@ select_window() {
 
   decho "Selection of window id:${window_id} in Session ${tmux_session}"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-    decho $TMUX_CMD select-window -t ${tmux_session}:${window_id}
-    $TMUX_CMD select-window -t ${tmux_session}:${window_id}
+    decho ${TMUX_CMD} select-window -t ${tmux_session}:${window_id}
+    ${TMUX_CMD} select-window -t ${tmux_session}:${window_id}
   fi
 }
 
