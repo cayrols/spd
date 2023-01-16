@@ -11,8 +11,8 @@ SPLIT_OUTPUT=$FALSE
 
 DEV_MODE=$TRUE
 DEV_MODE=$FALSE
-VERBOSE=${TRUE}
 VERBOSE=${FALSE}
+VERBOSE=${TRUE}
 
 main() {
   local input_params=$@
@@ -35,8 +35,15 @@ main() {
       fifo_pane_id=${LOCAL_FIFOS}/fifo_${WORLD_RANK}
     fi
     
+   #decho "[${WORLD_RANK}] execute: ${CMD} > ${fifo_pane_id} 2>&1 < ${fifo_pane_id}_in"
+   #decho "[${WORLD_RANK}] execute: ${CMD} >${fifo_pane_id} <${fifo_pane_id}_in"
+   #decho "[${WORLD_RANK}] execute: ${CMD} <${fifo_pane_id}_in >${fifo_pane_id}"
     decho "[${WORLD_RANK}] execute: ${CMD} > ${fifo_pane_id} 2>&1"
     if [ "${DEV_MODE}" -eq "${FALSE}" ]; then
+     #exec ${CMD} > ${fifo_pane_id} 2>&1 < ${fifo_pane_id}_in
+     #exec ${CMD} >${fifo_pane_id} <${fifo_pane_id}_in
+     #exec ${CMD} <${fifo_pane_id}_in >${fifo_pane_id}
+     #exec ${CMD} #> ${fifo_pane_id} 2>&1 < ${fifo_pane_id}_in
       exec ${CMD} > ${fifo_pane_id} 2>&1
     fi
   fi

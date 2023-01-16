@@ -601,6 +601,15 @@ setup_pane_using_pipe() {
       mkfifo ${pane_pipe} \
         || error "Cannot create pipe ${pane_pipe}" ${ERROR_PIPE}
     fi
+    # WIP
+    if [ -e ${pane_pipe}_in ]; then
+      decho "Pipe ${pane_pipe}_in already exists."
+    else
+      decho "mkfifo ${pane_pipe}_in"
+      mkfifo ${pane_pipe}_in \
+        || error "Cannot create pipe ${pane_pipe}_in" ${ERROR_PIPE}
+    fi
+    # End WIP 
 
     # Define a default command but may use user-defined command instead
     default_cmd+="cpt=0; while true; do "
