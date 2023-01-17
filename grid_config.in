@@ -1,0 +1,52 @@
+#===========
+# This file contains the main variables that can be customized for 
+# a specific execution or code.
+# NOTE: some of the content of this file may be overwritten by a 
+# .gridrc file that may contain a subset of the var, like gdb and gdbserver.
+
+#===========
+# General variables
+
+# Default (useful for debugging)
+# Grid X * Y * Z
+DIM_X=1
+DIM_Y=2
+DIM_Z=1
+
+# Turn on the dev mode that disables the execution on the commands 
+# for the master and the panes.
+DEV_MODE=${FALSE}
+
+# Internal flag that allows us to get prints with the execution of the cmd.
+# It is different to DEV_MODE.
+VERBOSE=${FALSE}
+
+#===========
+# Some paths
+
+# Path where the tmux session will be created
+# NOTE: for now we conider spd as main purpose
+GRID_MANAGER_USER_DIR=$HOME/.spd
+
+#===========
+# TMUX related
+
+# Path where the tmux session will be created
+GRID_MANAGER_USER_TMUX_TMPDIR=${GRID_MANAGER_USER_DIR}/tmux_spd_socket
+
+# Name of the tmux session created
+GRID_MANAGER_TMUX_SESSION_NAME=spd
+
+# ID of the window used as initial window
+GRID_MANAGER_TMUX_INITIAL_WINDOW_ID=0
+
+# Turn ON/OFF whether the script uses the user socket
+GRID_MANAGER_TMUX_USE_USER_SOCKET=${TRUE}
+
+# Consider a master pane
+GRID_MANAGER_WITH_MASTER=${TRUE}
+#===========
+# Display
+
+# Size reserved for the master pane
+MASTER_PANE_SIZE=30
