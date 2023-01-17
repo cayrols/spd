@@ -17,7 +17,7 @@ RANK_LIST=()
 
 # Turn on the dev mode that disables the execution on the commands 
 # for the master and the panes.
-DEV_MODE=$FALSE
+DEV_MODE=${FALSE}
 
 # Internal flag that allows us to get prints with the execution of the cmd.
 # It is different to DEV_MODE.
