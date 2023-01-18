@@ -20,6 +20,11 @@ TMUX_CMD="tmux"
 VERTICAL=v
 HORIZONTAL=h
 
+#-------------------
+# Codes retuned when:
+# The grid dimension does not match
+ERROR_GRID_DIM=1
+
 # Pseudo code
 # Considering a 3D grid to display of size x,y,z
 #   - For 1:z
@@ -59,6 +64,7 @@ main(){
 
   bold "Parsed information:"
   echo "Execution : grid ${DIM_X}*${DIM_Y}*${DIM_Z}"
+  echo "Sparse: ${NELEMENT_PER_ROW[@]}"
 
   # Update the TMUX command that is used by inner functions
   if [ ${GRID_MANAGER_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
@@ -69,14 +75,21 @@ main(){
   #================
   # Main
   #================
-  create_3d_grid ${DIM_X} ${DIM_Y} ${DIM_Z} \
-    ${GRID_MANAGER_TMUX_SESSION_NAME} \
-    ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
-    ${GRID_MANAGER_WITH_MASTER}
+  if [ ${#NELEMENT_PER_ROW[@]} -gt 0 ]; then
+    create_3d_sparse_grid ${DIM_X} ${DIM_Y} ${DIM_Z} \
+      ${GRID_MANAGER_TMUX_SESSION_NAME} \
+      ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
+      ${GRID_MANAGER_WITH_MASTER} ${NELEMENT_PER_ROW[@]}
+  else
+    create_3d_regular_grid ${DIM_X} ${DIM_Y} ${DIM_Z} \
+      ${GRID_MANAGER_TMUX_SESSION_NAME} \
+      ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
+      ${GRID_MANAGER_WITH_MASTER}
+  fi
 }
 
-create_3d_grid(){
-  local desc="This function creates a 3D grid of panes,"
+create_3d_regular_grid(){
+  local desc="This function creates a regular 3D grid of panes,"
     desc+=" using z-dim for managing number of tmux windows needed"
   local dim_x=$1
   local dim_y=$2
@@ -109,6 +122,74 @@ create_3d_grid(){
     create_window ${tmux_session} ${window_id} ${window_name}
     create_2d_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
       ${dim_x} ${dim_y}
+  done
+}
+
+create_3d_sparse_grid(){
+  local desc="This function creates a sparse 3D grid of panes,"
+    desc+=" using z-dim for managing number of tmux windows needed"
+  local dim_x=$1
+  local dim_y=$2
+  local dim_z=$3
+  local tmux_session=$4
+  local initial_window=$5
+  local with_master=$6
+  shift 6
+  local npane_per_row=( $@ )
+
+  local window_id=${initial_window}
+  local window_name=""
+  local pane_size=$(( 100 - MASTER_PANE_SIZE ))
+  local pane_ancestor_id=0
+  local nlpane_per_row=()
+  local ldim_x=${dim_x}
+  local max_total_row=
+  local ntotal_row=${#npane_per_row[@]}
+
+  # Checking
+  if [ ${ntotal_row} -gt $(( dim_x * dim_z )) ]; then
+    error "The npane_per_row size ${ntotal_row} is greater than $(( dim_x * dim_z ))" \
+      ${ERROR_GRID_DIM}
+  fi
+
+  # Create the first grid alongwith a master pane if requested.
+  if [ ${with_master} -eq ${TRUE} ]; then
+    create_pane ${tmux_session} ${window_id} ${pane_ancestor_id} \
+      ${HORIZONTAL} ${pane_size}
+    pane_ancestor_id=${_RETVAL}
+  fi
+
+  # Special case
+  if [ ${ntotal_row} -le ${dim_x} ]; then
+    warning "Special case: ${ntotal_row} < ${dim_x}"
+    create_2d_sparse_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
+      ${ntotal_row} \
+      ${npane_per_row[@]}
+    return
+  fi
+
+  create_2d_sparse_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
+    ${ldim_x} \
+    ${npane_per_row[@]:0:${ldim_x}}
+
+  # Recompute dim_z as it may be smaller now
+  dim_z=$( expr $(( ntotal_row + dim_x - 1 )) / ${dim_x} )
+  warning "Recomputed dim_z ${dim_z}"
+
+  # All remaining windows should be empty and so starts with pane_0
+  pane_ancestor_id=0
+  for k in $( seq 1 $(( dim_z - 1 )) ); do
+    window_id=$(( initial_window + k ))
+    window_name="page_"${k}
+    if [ $(( dim_x * (k + 1) )) -gt ${ntotal_row} ]; then
+      warning "Change ldim_x to $(( ntotal_row - dim_x * k ))"
+      ldim_x=$(( ntotal_row - dim_x * k ))
+    fi
+
+    create_window ${tmux_session} ${window_id} ${window_name}
+    create_2d_sparse_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
+      ${ldim_x} \
+      ${npane_per_row[@]:$(( dim_x*k )):${ntotal_row}}
   done
 }
 
@@ -177,6 +258,61 @@ create_2d_grid(){
       # Prepare for the next iteration
       pane_parent_id=${pane_id}
     done
+  done
+}
+
+create_2d_sparse_grid(){
+  local desc="This function creates a 2D sparse grid x * y in a given window."
+    desc+="Note: x is the number of rows."
+  local tmux_session=$1
+  local window_id=$2
+  local pane_ancestor_id=$3
+  local dim_x=$4
+  shift 4
+  local dim_y=( $@ ) 
+
+  local pane_parent_id=${pane_ancestor_id}
+
+  local pane_offset=0
+
+  # Create the rows first
+  local pane_size=100
+  local pane_id=-1 # Incorrect on purpose
+
+  decho "[W:${window_id}] Creation of ${dim_x} rows."
+  for p in $( seq 2 ${dim_x} ); do
+    compute_pane_size $(( p - 1 )) ${dim_x}
+    pane_size=${_RETVAL}
+
+    decho "[W:${window_id}] Creation of a space for row ${p} from pane ${pane_parent_id}"
+    create_pane ${tmux_session} ${window_id} ${pane_parent_id} \
+      ${VERTICAL} ${pane_size}
+    pane_id=${_RETVAL}
+    decho "[W:${window_id}]\t\t\t\tPane ${pane_id} created"
+
+    # Prepare for the next iteration
+    pane_parent_id=${pane_id}
+  done
+
+  decho "[W:${window_id}] Creation of ${dim_y[@]} elements over ${dim_x} rows."
+  # Creation of the panes as a grid PxQ, row by row
+  pane_parent_id=${pane_ancestor_id}
+  for p in $( seq 0 $(( dim_x - 1 )) ); do
+    for q in $( seq 2 ${dim_y[${p}]} ); do
+      compute_pane_size ${q} $(( dim_y[${p}] + 1 ))
+      pane_size=${_RETVAL}
+
+      decho "[W:${window_id}] Creation of a new pane from pane ${pane_parent_id}"
+      create_pane ${tmux_session} ${window_id} ${pane_parent_id} \
+        ${HORIZONTAL} ${pane_size}
+      pane_id=${_RETVAL}
+      decho "[W:${window_id}]\t\t\t\tPane ${pane_id} created."
+
+      # Prepare for the next iteration
+      pane_parent_id=${pane_id}
+    done
+    # Increment because of the first element of the next row
+    pane_parent_id=$(( pane_parent_id + 1 ))
   done
 }
 
@@ -351,6 +487,9 @@ chelp() {
   bold    "\t--create_with_master <bool: DEFAULT ${GRID_MANAGER_WITH_MASTER-}>"
   echo -e "\t\tCreate space for a master pane."
   
+  bold    "\t--rows_size <int list: DEFAULT ${NELEMENT_PER_ROW-}>"
+  echo -e "\t\tList of number of panes per row."
+  
   bold    "REMARKS"
   bold    "EXAMPLES"
 }
@@ -378,6 +517,11 @@ parse_param() {
       -h | --help )
         chelp $( basename $0 )
         exit 0
+        ;;
+      --rows_size) # MUST be the last
+        shift
+        NELEMENT_PER_ROW=( $@ )
+        break
         ;;
       --tmux_initial_window_id)
         shift
