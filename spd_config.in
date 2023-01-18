@@ -43,6 +43,9 @@ SPD_TMUX_USE_USER_SOCKET=${TRUE}
 #===========
 # Display
 
+# Enable paging: NROW_PER_PAGE used to display the rows per window
+PAGING=0
+
 # Number of rows per page
 NROW_PER_PAGE=2
 
@@ -110,4 +113,3 @@ PYTHON_BIN=python3
 
 # XXX Features not checked
 REARRANGE_GRID=$FALSE
-PAGING=$FALSE
