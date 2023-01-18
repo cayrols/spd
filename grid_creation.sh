@@ -103,7 +103,7 @@ create_3d_grid(){
   # All remaining windows should be empty and so starts with pane_0
   pane_ancestor_id=0
   for k in $( seq 2 ${dim_z} ); do
-    window_id=$(( initial_window + k ))
+    window_id=$(( initial_window + k - 1 )) # -1 because of k
     window_name="page_"${k}
 
     create_window ${tmux_session} ${window_id} ${window_name}
