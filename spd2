@@ -215,8 +215,6 @@ set -e
   #================
 
   # TODO here it would not work if no socket given
-  # Change P and Q based on ranks so that
-  # the amount of panes created is reduced.
   decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
     --tmux_session ${SPD_TMUX_SESSION_NAME} \
     --tmux_initial_window_id ${MASTER_WINDOW} \
