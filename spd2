@@ -21,6 +21,8 @@ ERROR_PIPE=2
 ERROR_SEND_CMD=3
 # The requested mode for the master is incorrect
 ERROR_PANE_MODE=4
+# The requested mode for the master is incorrect
+ERROR_PANE_KILL=5
 
 #Pane orientation choices
 VERTICAL=v
@@ -167,37 +169,46 @@ set -e
 
   # We generate the mapping beforehand as we need to know
   # in the sparse case the list of active rows.
+  local nnz_row=0
+  local sparse_grid_params=""
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     decho "Creation of sparse grid"
-    create_sparse_grid ${P} ${Q} ${RANK_LIST[@]}
+    create_sparse_grid ${P} ${Q} ${nrow_per_window} ${RANK_LIST[@]}
+
+    # Count the total number of non-empty rows
+    for i in $( seq 0 $((P - 1)) ); do
+      local nlrank=$(( ${ROW_PTR[ $((i + 1)) ]} - ${ROW_PTR[ ${i} ]} ))
+      decho "Row ${i}: ${nlrank} elements"
+      if [ ${nlrank} -gt 0 ]; then
+        nnz_row=$(( nnz_row + 1 ))
+      fi
+    done
+
+    # Compute the number of ranks in each row
+    sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
+    decho "sparse_grid_params: ${sparse_grid_params}"
+    # TODO if rearrange is used, we should change PANE_ID and PANE_ANCESTOR_ID
+    # OR create another create_sparse_grid
+    # OR pass an extra parameter to create_sparse_grid to rearrange at the
+    # same time.
   else
     decho "Creation of dense grid"
     create_dense_grid ${P} ${Q} ${nrow_per_window}
-  fi
 
-  # Count the total number of non-empty rows
-  local ntotal_active_rows=0
-  local nlrank=0
-  for i in $( seq 0 $((P - 1)) ); do
-    nlrank=$(( ${ROW_PTR[ $((i + 1)) ]} - ${ROW_PTR[ ${i} ]} ))
-    decho "Row ${i}: ${nlrank} elements"
-    if [ ${nlrank} -gt 0 ]; then
-      ntotal_active_rows=$(( ntotal_active_rows + 1 ))
-    fi
-  done
+    nnz_row=${P}
+  fi
 
   # Count the number of pages needed:
   # - if paging is not requested, only one window will be created.
   local nwindows=0
   if [ ${PAGING} -eq ${TRUE} ]; then
     local PYTHONCMD="from math import ceil; "
-    PYTHONCMD+="print( ceil(${ntotal_active_rows}/${NROW_PER_PAGE}) )"
+    PYTHONCMD+="print( ceil(${nnz_row}/${NROW_PER_PAGE}) )"
     nwindows=$( ${PYTHON_BIN} -c "${PYTHONCMD}" )
     decho "nwindows: ${nwindows}"
   else
     nwindows=1
   fi
-
 
   #================
   step "Creation of the grid"
@@ -206,11 +217,18 @@ set -e
   # TODO here it would not work if no socket given
   # Change P and Q based on ranks so that
   # the amount of panes created is reduced.
+  decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+    --tmux_session ${SPD_TMUX_SESSION_NAME} \
+    --tmux_initial_window_id ${MASTER_WINDOW} \
+    --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
+    --create_with_master ${TRUE} --nrow ${nnz_row} \
+    ${sparse_grid_params}
   ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
     --tmux_session ${SPD_TMUX_SESSION_NAME} \
     --tmux_initial_window_id ${MASTER_WINDOW} \
     --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-    --create_with_master ${TRUE}
+    --create_with_master ${TRUE} --nrow ${nnz_row} \
+    ${sparse_grid_params}
 
   #================
   # Launch the execution
@@ -638,6 +656,10 @@ map_ranks_to_window(){
 
   local nlpane_setup=0
   local nlrank=0
+  local pane_ptr=0
+  local pane_idx=0
+  local pane_rank=0
+  local pane_port=0
 
   # TODO update the name of the window with the ranks displayed in.
 
@@ -728,6 +750,8 @@ create_dense_grid() {
       lpane_id+=( ${pane_id} )
       lpane_rank+=( ${cur_rank} )
       lpane_ancestor_id+=( ${pane_ancestor_id} )
+      # TODO seems incorrect for other than the first window
+      # BUT I guess it does not matter anymore.
       pane_ancestor_id=$(( pane_ancestor_id + 1 ))
 
       nval=$((nval + 1))
@@ -765,28 +789,39 @@ create_sparse_grid() {
     desc+="where only the given ranks are inserted."
   local nrow=$1
   local ncol=$2
-  shift 2
+  local nrow_per_window=$3
+  shift 3
   local ranks=( $@ )
 
   local lrow_ptr=()
   local lpane_id=()
   local lpane_ancestor_id=()
   local lpane_rank=()
+  local lnnz_row_ptr=()
   local nval=0
+  local lrow_is_empty=${TRUE}
+  local nrow_non_empty=0
+  local pane_id=0
   local size=$(( nrow * ncol ))
   local cur_rank=0
+  local with_pane_master=1
 
   # init the value to te first pane, i.e., pane -t 0
   local row_counter=0
   local col_ancestor=0 # XXX assuming the gdbserver pane is 0
   local row_ancestor=0
-  local is_row_leader=${TRUE}
+
+  local pane_ancestor_id=0
   lrow_ptr+=( 0 )
+
+  # We offset the paneId when a master exists
+  if [ ${with_pane_master} -eq 1 ]; then
+    pane_id=1
+  fi
 
   # For each row of a dense grid
   for p in $( seq 1 ${nrow} ); do
-    is_row_leader=${TRUE}
-
+    lrow_is_empty=${TRUE}
     # For each col of a dense grid
     for q in $( seq 0 $((ncol - 1)) ); do
       # Compute rank associated with the entry (p, q) in the grid
@@ -796,52 +831,67 @@ create_sparse_grid() {
       is_active_rank ${cur_rank} ${ranks[@]}
 
       if [ ${ACTIVE_RANK} -eq ${TRUE} ]; then
-        if [ ${is_row_leader} -eq ${TRUE} ]; then
-          row_counter=$((row_counter + 1))
-          ancestor=${col_ancestor}
-          col_ancestor=${row_counter}
-          is_row_leader=${FALSE}
-        else
-          ancestor=${row_ancestor}
-        fi
-        nval=$((nval + 1))
-
-        lpane_id+=( ${nval} )
+        lpane_id+=( ${pane_id} )
         lpane_rank+=( ${cur_rank} )
-        lpane_ancestor_id+=( ${ancestor} )
+        lpane_ancestor_id+=( ${pane_ancestor_id} )
+        pane_ancestor_id=$(( pane_ancestor_id + 1 ))
         
-        row_ancestor=${nval}
+        nval=$((nval + 1))
+        lrow_is_empty=${FALSE}
+        pane_id=$((pane_id + 1))
       fi
       # Clean what was created by the call to is_active_rank
       unset ACTIVE_RANK
     done
     lrow_ptr+=( ${nval} )
+
+    # Increase the number of non-empty rows.
+    if [ ${lrow_is_empty} -eq ${FALSE} ]; then
+      nrow_non_empty=$(( nrow_non_empty + 1 ))
+    fi
+
+    # Reset some values if moving to next window.
+    if [ $(expr ${nrow_non_empty} % ${nrow_per_window} ) -eq 0 ]; then
+      pane_ancestor_id=0
+      pane_id=0
+      with_pane_master=0
+    fi
   done
-  decho "rowPtr         ${lrow_ptr[@]}"
-  decho "paneId         ${lpane_id[@]}"
-  decho "paneRanks      ${lpane_rank[@]}"
-  decho "paneAncestorId ${lpane_ancestor_id[@]}"
+
+  # nnz ROW_PTR
+  for p in $( seq 0 $(( nrow - 1 )) ); do
+    local nlelement=$(( ${lrow_ptr[$(( p + 1 ))]} - ${lrow_ptr[${p}]} ))
+    if [ ${nlelement} -ne 0 ]; then
+      lnnz_row_ptr+=( ${nlelement} )
+    fi
+  done
+
+  decho "rowPtr           ${lrow_ptr[@]}"
+  decho "paneId           ${lpane_id[@]}"
+  decho "paneRanks        ${lpane_rank[@]}"
+  decho "paneAncestorId   ${lpane_ancestor_id[@]}"
+  decho "Elements on rows ${lnnz_row_ptr[@]}"
 
   # Return arrays
   ROW_PTR=( ${lrow_ptr[@]} )
   PANE_ID=( ${lpane_id[@]} )
   PANE_RANK=( ${lpane_rank[@]} )
   PANE_ANCESTOR_ID=( ${lpane_ancestor_id[@]} )
+  NNZ_ROW_PTR=( ${lnnz_row_ptr[@]} )
 }
 
 compute_list_rows_to_display() {
   local desc="This function creates a list of rows to display in a window."
   local nrow_start=$1
-  local nrow_total=$2
-  local page_max_nrow=$3
-  shift 3
+  local page_max_nrow=$2
+  shift 2
   local row_ptr=( $@ )
 
   local nlrank=0
   local nlactive_row=0
   local lrow_to_display=()
 
-  for i in $(seq $nrow_start $((nrow_total - 1)) ); do
+  for i in $(seq ${nrow_start} $((P - 1)) ); do
     nlrank=$(( ${row_ptr[ $((i + 1)) ]} - ${row_ptr[ ${i} ]} ))
     decho "Row ${i}: ${nlrank} elements"
 
@@ -869,10 +919,9 @@ map_ranks(){
 
   # Map ranks to panes
   for window_id in $( seq ${initial_window} $((nwindows + initial_window - 1)) ); do 
-    compute_list_rows_to_display ${nrow_displayed} ${nwindows} \
-      ${nrow_per_window} ${ROW_PTR[@]}
+    compute_list_rows_to_display ${nrow_displayed} ${nrow_per_window} ${ROW_PTR[@]}
     lrow_to_display=( ${_RETVAL[@]} )
-    decho "[W:${window_id}] Rows to display in window ${window_id}: ${lrow_to_display[@]}"
+    decho "[W:${window_id}] ${lrow_to_display[@]} rows to display in window ${window_id}"
 
     map_ranks_to_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${lrow_to_display[@]}
 
