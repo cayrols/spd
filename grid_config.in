@@ -13,6 +13,13 @@ DIM_X=1
 DIM_Y=2
 DIM_Z=1
 
+# Total number of rows to display in the dense case.
+# When 0, the value will be computed internally as DIM_X * DIM_Z.
+GRID_MANAGER_NROW=0
+
+# In the sparse case, it contains a list of #pane for each of DIM_X
+NELEMENT_PER_ROW=( )
+
 # Turn on the dev mode that disables the execution on the commands 
 # for the master and the panes.
 DEV_MODE=${FALSE}
@@ -20,6 +27,7 @@ DEV_MODE=${FALSE}
 # Internal flag that allows us to get prints with the execution of the cmd.
 # It is different to DEV_MODE.
 VERBOSE=${FALSE}
+VERBOSE=${TRUE}
 
 #===========
 # Some paths
