@@ -187,7 +187,7 @@ set -e
     # Compute the number of ranks in each row
     sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
     decho "sparse_grid_params: ${sparse_grid_params}"
-    # TODO if rearrange is used, we should change PANE_ID and PANE_ANCESTOR_ID
+    # TODO if rearrange is used, we should change PANE_ID
     # OR create another create_sparse_grid
     # OR pass an extra parameter to create_sparse_grid to rearrange at the
     # same time.
@@ -713,24 +713,20 @@ is_active_rank() {
 #   2/ number of columns
 create_dense_grid() {
   local desc="This function creates a dense grid where "
-    desc+="each pane is associated with a rank and an ancestor pane."
+    desc+="each pane is associated with a rank."
   local nrow=$1
   local ncol=$2
   local nrow_per_window=$3
 
   local lrow_ptr=()
   local lpane_id=()
-  local lpane_ancestor_id=()
   local lpane_rank=()
   local nval=0
   local pane_id=0
   local with_pane_master=1
 
   # init the value to te first pane, i.e., pane -t 0
- #local row_ancestor=0
- #local col_ancestor=0
  #local is_row_leader=${TRUE}
-  local pane_ancestor_id=0
   lrow_ptr+=( 0 )
 
   # We offset the paneId when a master exists
@@ -747,10 +743,6 @@ create_dense_grid() {
 
       lpane_id+=( ${pane_id} )
       lpane_rank+=( ${cur_rank} )
-      lpane_ancestor_id+=( ${pane_ancestor_id} )
-      # TODO seems incorrect for other than the first window
-      # BUT I guess it does not matter anymore.
-      pane_ancestor_id=$(( pane_ancestor_id + 1 ))
 
       nval=$((nval + 1))
       pane_id=$((pane_id + 1))
@@ -760,7 +752,6 @@ create_dense_grid() {
 
     # Reset some values if moving to next window.
     if [ $(expr ${p} % ${nrow_per_window} ) -eq 0 ]; then
-      pane_ancestor_id=0
       pane_id=0
       with_pane_master=0
     fi
@@ -768,13 +759,11 @@ create_dense_grid() {
   decho "rowPtr         ${lrow_ptr[@]}"
   decho "paneId         ${lpane_id[@]}"
   decho "paneRanks      ${lpane_rank[@]}"
-  decho "paneAncestorId ${lpane_ancestor_id[@]}"
 
   # Return arrays
   ROW_PTR=( ${lrow_ptr[@]} )
   PANE_ID=( ${lpane_id[@]} )
   PANE_RANK=( ${lpane_rank[@]} )
-  PANE_ANCESTOR_ID=( ${lpane_ancestor_id[@]} )
 }
 
 # This routine creates a regular grid in a CSR format.
@@ -793,7 +782,6 @@ create_sparse_grid() {
 
   local lrow_ptr=()
   local lpane_id=()
-  local lpane_ancestor_id=()
   local lpane_rank=()
   local lnnz_row_ptr=()
   local nval=0
@@ -806,10 +794,7 @@ create_sparse_grid() {
 
   # init the value to te first pane, i.e., pane -t 0
   local row_counter=0
-  local col_ancestor=0 # XXX assuming the gdbserver pane is 0
-  local row_ancestor=0
 
-  local pane_ancestor_id=0
   lrow_ptr+=( 0 )
 
   # We offset the paneId when a master exists
@@ -831,8 +816,6 @@ create_sparse_grid() {
       if [ ${ACTIVE_RANK} -eq ${TRUE} ]; then
         lpane_id+=( ${pane_id} )
         lpane_rank+=( ${cur_rank} )
-        lpane_ancestor_id+=( ${pane_ancestor_id} )
-        pane_ancestor_id=$(( pane_ancestor_id + 1 ))
         
         nval=$((nval + 1))
         lrow_is_empty=${FALSE}
@@ -850,7 +833,6 @@ create_sparse_grid() {
 
     # Reset some values if moving to next window.
     if [ $(expr ${nrow_non_empty} % ${nrow_per_window} ) -eq 0 ]; then
-      pane_ancestor_id=0
       pane_id=0
       with_pane_master=0
     fi
@@ -867,14 +849,12 @@ create_sparse_grid() {
   decho "rowPtr           ${lrow_ptr[@]}"
   decho "paneId           ${lpane_id[@]}"
   decho "paneRanks        ${lpane_rank[@]}"
-  decho "paneAncestorId   ${lpane_ancestor_id[@]}"
   decho "Elements on rows ${lnnz_row_ptr[@]}"
 
   # Return arrays
   ROW_PTR=( ${lrow_ptr[@]} )
   PANE_ID=( ${lpane_id[@]} )
   PANE_RANK=( ${lpane_rank[@]} )
-  PANE_ANCESTOR_ID=( ${lpane_ancestor_id[@]} )
   NNZ_ROW_PTR=( ${lnnz_row_ptr[@]} )
 }
 
