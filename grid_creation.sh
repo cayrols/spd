@@ -37,9 +37,7 @@ ERROR_GRID_DIM=1
 # and then the columns.
 
 # Question: 
-#   - Should we create a regular 3D grid and kill the elements that
-#    are not needed?
-#   - 
+#   - Can we update the existing grid?
 
 main(){
   local desc="This function manages the creation of a 3D grid of panes."
@@ -81,7 +79,10 @@ main(){
       ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
       ${GRID_MANAGER_WITH_MASTER} ${NELEMENT_PER_ROW[@]}
   else
-    create_3d_regular_grid ${DIM_X} ${DIM_Y} ${DIM_Z} \
+    if [ ${GRID_MANAGER_NROW} -eq 0 ]; then
+      GRID_MANAGER_NROW=$(( DIM_X * DIM_Z ))
+    fi
+    create_3d_regular_grid ${DIM_X} ${DIM_Y} ${DIM_Z} ${GRID_MANAGER_NROW} \
       ${GRID_MANAGER_TMUX_SESSION_NAME} \
       ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
       ${GRID_MANAGER_WITH_MASTER}
@@ -94,14 +95,16 @@ create_3d_regular_grid(){
   local dim_x=$1
   local dim_y=$2
   local dim_z=$3
-  local tmux_session=$4
-  local initial_window=$5
-  local with_master=$6
+  local ntotal_rows=$4
+  local tmux_session=$5
+  local initial_window=$6
+  local with_master=$7
 
   local window_id=${initial_window}
   local window_name=""
   local pane_size=$(( 100 - MASTER_PANE_SIZE ))
   local pane_ancestor_id=0
+  local nrow_displayed=0
 
   # Create the first grid alongwith a master pane if requested.
   if [ ${with_master} -eq ${TRUE} ]; then
@@ -112,6 +115,7 @@ create_3d_regular_grid(){
 
   create_2d_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
     ${dim_x} ${dim_y}
+  nrow_displayed=$(( nrow_displayed + dim_x ))
 
   # All remaining windows should be empty and so starts with pane_0
   pane_ancestor_id=0
@@ -119,9 +123,20 @@ create_3d_regular_grid(){
     window_id=$(( initial_window + k - 1 )) # -1 because of k
     window_name="page_"${k}
 
+    if [ $(( nrow_displayed + dim_x )) -gt ${ntotal_rows} ]; then
+      dim_x=$(( ntotal_rows - nrow_displayed ))
+      decho "Update dim_x: ${dim_x}"
+      if [ ${dim_x} -eq 0 ]; then
+        warning "Update dim_x: ${dim_x}, stop the creation of the grid."
+        break
+      fi
+    fi
+
     create_window ${tmux_session} ${window_id} ${window_name}
     create_2d_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
       ${dim_x} ${dim_y}
+
+    nrow_displayed=$(( nrow_displayed + dim_x ))
   done
 }
 
@@ -144,11 +159,11 @@ create_3d_sparse_grid(){
   local nlpane_per_row=()
   local ldim_x=${dim_x}
   local max_total_row=
-  local ntotal_row=${#npane_per_row[@]}
+  local ntotal_rows=${#npane_per_row[@]}
 
   # Checking
-  if [ ${ntotal_row} -gt $(( dim_x * dim_z )) ]; then
-    error "The npane_per_row size ${ntotal_row} is greater than $(( dim_x * dim_z ))" \
+  if [ ${ntotal_rows} -gt $(( dim_x * dim_z )) ]; then
+    error "The npane_per_row size ${ntotal_rows} is greater than $(( dim_x * dim_z ))" \
       ${ERROR_GRID_DIM}
   fi
 
@@ -160,10 +175,10 @@ create_3d_sparse_grid(){
   fi
 
   # Special case
-  if [ ${ntotal_row} -le ${dim_x} ]; then
-    warning "Special case: ${ntotal_row} < ${dim_x}"
+  if [ ${ntotal_rows} -le ${dim_x} ]; then
+    warning "Special case: ${ntotal_rows} < ${dim_x}"
     create_2d_sparse_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
-      ${ntotal_row} \
+      ${ntotal_rows} \
       ${npane_per_row[@]}
     return
   fi
@@ -173,7 +188,7 @@ create_3d_sparse_grid(){
     ${npane_per_row[@]:0:${ldim_x}}
 
   # Recompute dim_z as it may be smaller now
-  dim_z=$( expr $(( ntotal_row + dim_x - 1 )) / ${dim_x} )
+  dim_z=$( expr $(( ntotal_rows + dim_x - 1 )) / ${dim_x} )
   warning "Recomputed dim_z ${dim_z}"
 
   # All remaining windows should be empty and so starts with pane_0
@@ -181,15 +196,15 @@ create_3d_sparse_grid(){
   for k in $( seq 1 $(( dim_z - 1 )) ); do
     window_id=$(( initial_window + k ))
     window_name="page_"${k}
-    if [ $(( dim_x * (k + 1) )) -gt ${ntotal_row} ]; then
-      warning "Change ldim_x to $(( ntotal_row - dim_x * k ))"
-      ldim_x=$(( ntotal_row - dim_x * k ))
+    if [ $(( dim_x * (k + 1) )) -gt ${ntotal_rows} ]; then
+      warning "Change ldim_x to $(( ntotal_rows - dim_x * k ))"
+      ldim_x=$(( ntotal_rows - dim_x * k ))
     fi
 
     create_window ${tmux_session} ${window_id} ${window_name}
     create_2d_sparse_grid ${tmux_session} ${window_id} ${pane_ancestor_id} \
       ${ldim_x} \
-      ${npane_per_row[@]:$(( dim_x*k )):${ntotal_row}}
+      ${npane_per_row[@]:$(( dim_x*k )):${ntotal_rows}}
   done
 }
 
@@ -461,36 +476,42 @@ chelp() {
           " --tmux_session <tmux_session_name>" \
           " --tmux_initial_window_id <window_id>" \
           " --create_with_master <TRUE|FALSE>"
-  
+
   bold    "DESCRIPTION"
   echo -e "\tNone"
-  
+
   bold    "OPTIONS"
   bold    "\t-x <int: DEFAULT ${DIM_X-}>"
   echo -e "\t\tThe number of hosts per 2D grid."
-  
+
   bold    "\t-y <int: DEFAULT ${DIM_Y-}>"
   echo -e "\t\tThe number of MPI processes per host."
 
   bold    "\t-z <int: DEFAULT ${DIM_Z-}>"
   echo -e "\t\tThe number of 2D grid."
-  
+
   bold    "\t--tmux_session <name: DEFAULT ${GRID_MANAGER_TMUX_SESSION_NAME-}>"
   echo -e "\t\tThe name of the tmux session to use."
-  
+
   bold    "\t--tmux_socket <path/name: DEFAULT ${GRID_MANAGER_USER_TMUX_TMPDIR-}>"
   echo -e "\t\tThe name of the tmux session to use."
-  
+
   bold    "\t--tmux_initial_window_id <int: DEFAULT ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID}>"
   echo -e "\t\tThe initial window ID where to create the grid."
-  
+
   bold    "\t--create_with_master <bool: DEFAULT ${GRID_MANAGER_WITH_MASTER-}>"
   echo -e "\t\tCreate space for a master pane."
-  
+
+  bold    "\t--nrow <int: DEFAULT ${GRID_MANAGER_NROW-}>"
+  echo -e "\t\tNumber of rows to display in total."
+
   bold    "\t--rows_size <int list: DEFAULT ${NELEMENT_PER_ROW-}>"
   echo -e "\t\tList of number of panes per row."
-  
+  echo -e "\t\tNOTES: Must be the last one as a list is expected."
+
   bold    "REMARKS"
+  echo -e "\t\tIf the flag --rows_size is used, it MUST be the last one" \
+          " as a list is expected."
   bold    "EXAMPLES"
 }
 
@@ -517,6 +538,10 @@ parse_param() {
       -h | --help )
         chelp $( basename $0 )
         exit 0
+        ;;
+      --nrow)
+        shift
+        GRID_MANAGER_NROW=$1
         ;;
       --rows_size) # MUST be the last
         shift
