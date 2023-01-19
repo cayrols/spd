@@ -376,11 +376,14 @@ chelp() {
   echo -e "\t\t\t\tGeneral Commands Manual"
   bold    "NAME"
   echo -e "\t$0 - spd allows the split of ranks into a specific pane"
+
   bold    "SYNOPSIS"
   echo -e "\t$0 [OPTIONS] --exec <exec_name> --run <commandline>"
-  bold    "\t--exec <exec_name>"
+
+  bold    "\t--exec <path/exec_name: DEFAULT ${EXEC_NAME-}>"
   echo -e "\t\tThe name of the executable that is used to split the <commandline>"
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
+
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
 
@@ -393,9 +396,6 @@ chelp() {
 
   bold    "\t--dev"
   echo -e "\t\t[DEV purpose only] Enable DEV_MODE."
-
-  bold    "\t--exec <path/exec_name: DEFAULT ${EXEC_NAME-}>"
-  echo -e "\t\tThe executable used to parse the MPI commandline."
 
   bold    "\t--gdb"
   echo -e "\t\tRequest each rank to run gdb."
@@ -421,9 +421,6 @@ chelp() {
 
   bold    "\t--ranks <int,...>"
   echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
-
-  bold    "\t--run <mpi command to run>"
-  echo -e "\t\tMPI command to execute."
 
   bold    "\t--split"
   echo -e "\t\tRequest each rank to redirect their output to dedicated pane."
