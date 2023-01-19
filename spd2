@@ -214,19 +214,21 @@ set -e
   step "Creation of the grid"
   #================
 
-  # TODO here it would not work if no socket given
-  decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-    --tmux_session ${SPD_TMUX_SESSION_NAME} \
-    --tmux_initial_window_id ${MASTER_WINDOW} \
-    --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-    --create_with_master ${TRUE} --nrow ${nnz_row} \
-    ${sparse_grid_params}
-  ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-    --tmux_session ${SPD_TMUX_SESSION_NAME} \
-    --tmux_initial_window_id ${MASTER_WINDOW} \
-    --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-    --create_with_master ${TRUE} --nrow ${nnz_row} \
-    ${sparse_grid_params}
+  if [ ${SPD_UPDATE_PANES} -eq ${FALSE} ]; then
+    # TODO here it would not work if no socket given
+    decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+      --tmux_session ${SPD_TMUX_SESSION_NAME} \
+      --tmux_initial_window_id ${MASTER_WINDOW} \
+      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
+      --create_with_master ${TRUE} --nrow ${nnz_row} \
+      ${sparse_grid_params}
+    ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+      --tmux_session ${SPD_TMUX_SESSION_NAME} \
+      --tmux_initial_window_id ${MASTER_WINDOW} \
+      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
+      --create_with_master ${TRUE} --nrow ${nnz_row} \
+      ${sparse_grid_params}
+  fi
 
   #================
   # Launch the execution
@@ -381,22 +383,50 @@ chelp() {
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
-  
+
   bold    "DESCRIPTION"
   echo -e "\tNone"
-  
+
   bold    "OPTIONS"
+  bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
+  echo -e "\t\tAllows the user to not recreate the grid."
+
+  bold    "\t--dev"
+  echo -e "\t\t[DEV purpose only] Enable DEV_MODE."
+
+  bold    "\t--exec <path/exec_name: DEFAULT ${EXEC_NAME-}>"
+  echo -e "\t\tThe executable used to parse the MPI commandline."
+
+  bold    "\t--gdb"
+  echo -e "\t\tRequest each rank to run gdb."
+
+  bold    "\t--gdb_add_cmd <gdb_commands: DEFAULT ${GDB_ADDITIONAL_CMD:-}>"
+  echo -e "\t\tPass additional command to each gdb instances." \
+          "\t\tNOTE: previous name gdbaddcmd DEPRECATED."
+
+  bold    "\t-h, --help"
+  echo -e "\t\tPrint this message."
+
   bold    "\t-p <int: DEFAULT ${P-}>"
-  echo -e "\t\tThe number of hosts"
-  
+  echo -e "\t\tThe number of hosts."
+
+  bold    "\t--paging <int: DEFAULT ${NROW_PER_PAGE:-}"
+  echo -e "\t\tEnable paging the ranks displayed <int> rows per window."
+
+  bold    "\t--port <int: DEFAULT ${PORT-}>"
+  echo -e "\t\tThe number of hosts."
+
   bold    "\t-q <int: DEFAULT ${Q-}>"
-  echo -e "\t\tThe number of MPI processes per host"
-  
+  echo -e "\t\tThe number of MPI processes per host."
+
   bold    "\t--ranks <int,...>"
   echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
-  
-  bold    "\t--paging"
-  echo -e "\t\tCreate paging window."
+
+  bold    "\t--run <mpi command to run>"
+  echo -e "\t\tMPI command to execute."
+
+  bold    "\t--split"
+  echo -e "\t\tRequest each rank to redirect their output to dedicated pane."
 
   bold    "REMARKS"
   bold    "EXAMPLES"
@@ -417,7 +447,39 @@ parse_param() {
   local answer=""
 
   while [ $# -gt 0 ]; do
+    # Alphabetic order
     case $1 in
+     #--attach)
+     #  ATTACH=$TRUE
+     #  shift
+     #  ;;
+      --create_grid)
+        shift
+        SPD_UPDATE_PANES=${TRUE}
+        if [ $1 -eq 0 ]; then
+          SPD_UPDATE_PANES=${FALSE}
+        fi
+        shift
+        ;;
+      --dev) #Intent to be removed
+        shift
+        DEV_MODE=${TRUE}
+        ;;
+      --exec)
+        shift
+        EXEC_NAME=$1
+        shift
+        decho "GIVEN ${EXEC_NAME}"
+        ;;
+      --gdb)
+        shift
+        PANE_MODE="gdb"
+        ;;
+      --gdb_add_cmd | --gdbaddcmd)
+        shift
+        GDB_ADDITIONAL_CMD+=" $1"
+        shift
+        ;;
       -h | --help )
         chelp $( basename $0 )
         exit 0
@@ -427,47 +489,32 @@ parse_param() {
         P=$1
         shift
         ;;
-      -q)
-        shift
-        Q=$1
-        shift
-        ;;
       --paging)
         shift
         PAGING=${TRUE}
         NROW_PER_PAGE=$1
         shift
         ;;
-     #--rearrangeGrid) # TODO but not implemented yet
-     #  REARRANGEGRID=$TRUE
-     #  shift
-     #  ;;
       --port)
         shift
         PORT=$1
         shift
         ;;
-      --gdbaddcmd)
+      -q)
         shift
-        GDB_ADDITIONAL_CMD+=" $1"
+        Q=$1
         shift
         ;;
-     #--attach)
-     #  ATTACH=$TRUE
-     #  shift
-     #  ;;
       --ranks)
         shift
         RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
         decho "List of provided ranks: ${RANK_LIST[@]}"
         shift
         ;;
-      --exec)
-        shift
-        EXEC_NAME=$1
-        shift
-        decho "GIVEN ${EXEC_NAME}"
-        ;;
+     #--rearrangeGrid) # TODO but not implemented yet
+     #  REARRANGEGRID=$TRUE
+     #  shift
+     #  ;;
       --run)
         shift
         CMD_LINE=$*
@@ -477,14 +524,7 @@ parse_param() {
         shift
         PANE_MODE="split"
         ;;
-      --gdb)
-        shift
-        PANE_MODE="gdb"
-        ;;
-      --dev) #Intent to be removed
-        shift
-        DEV_MODE=${TRUE}
-        ;;
+      # Alphabetic order
       *)
         echo "$1 unknown argument" 1
         shift
