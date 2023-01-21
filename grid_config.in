@@ -27,7 +27,6 @@ DEV_MODE=${FALSE}
 # Internal flag that allows us to get prints with the execution of the cmd.
 # It is different to DEV_MODE.
 VERBOSE=${FALSE}
-VERBOSE=${TRUE}
 
 #===========
 # Some paths
