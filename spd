@@ -126,6 +126,15 @@ main() {
     TMUX_CMD="tmux"
   fi
 
+  if [ ${SPD_GRID_LOCAL} -eq ${TRUE} ]; then
+    get_tmux_info
+
+    # Overwrite MASTER info
+    SPD_TMUX_SESSION_NAME=${CURRENT_TMUX_SESSION_NAME}
+    MASTER_WINDOW=${CURRENT_TMUX_WINDOW_INDEX}
+    MASTER_PANE=${CURRENT_TMUX_PANE_INDEX}
+  fi
+
   # Check that tmux session already exists
   echo "Checking session ${SPD_TMUX_SESSION_NAME}"
   # XXX Remove when script okay
@@ -216,21 +225,26 @@ set -e
   #================
 
   if [ ${SPD_UPDATE_PANES} -eq ${FALSE} ]; then
+    local grid_params="
+      -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+      --tmux_session ${SPD_TMUX_SESSION_NAME} \
+      --tmux_initial_window_id ${MASTER_WINDOW} \
+      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
+      --create_with_master ${TRUE} --nrow ${nnz_row}"
+
+    # Force the execution from the window the script is called.
+    # TODO Should we pass the exact info here or
+    # we just try to make it consistent?
+    if [ ${SPD_GRID_LOCAL} -eq ${TRUE} ]; then
+      grid_params+=" -l cw"
+    fi
+
     # TODO here it would not work if no socket given
     decho ${GRID_MANAGER_ROOT}/grid_creation.sh \
-      -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-      --tmux_session ${SPD_TMUX_SESSION_NAME} \
-      --tmux_initial_window_id ${MASTER_WINDOW} \
-      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-      --create_with_master ${TRUE} --nrow ${nnz_row} \
-      ${sparse_grid_params}
+      ${grid_params} ${sparse_grid_params}
     ${GRID_MANAGER_ROOT}/grid_creation.sh \
-      -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-      --tmux_session ${SPD_TMUX_SESSION_NAME} \
-      --tmux_initial_window_id ${MASTER_WINDOW} \
-      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-      --create_with_master ${TRUE} --nrow ${nnz_row} \
-      ${sparse_grid_params}
+      ${grid_params} \
+      ${sparse_grid_params} # This parameter HAS TO be the last
   fi
 
   #================
@@ -490,6 +504,10 @@ parse_param() {
           chelp $( basename $0 )
           exit 0
           ;;
+        -l | --local)
+          shift
+          SPD_GRID_LOCAL=${TRUE}
+          ;;
         -p)
           shift
           P=$1
@@ -579,6 +597,19 @@ source_config_and_rc_files() {
       fi
     fi
   done
+}
+
+get_tmux_info() {
+  local desc="This function gets the actual tmux session, window and pane info."
+
+  # XXX Is it worth doing a single call and parse it?
+  CURRENT_TMUX_SESSION_NAME=$( ${TMUX_CMD} display-message -p '#{session_name}' )
+  CURRENT_TMUX_WINDOW_INDEX=$( ${TMUX_CMD} display-message -p '#{window_index}' )
+  CURRENT_TMUX_PANE_INDEX=$( ${TMUX_CMD} display-message -p '#{pane_index}' )
+
+  decho "Current Session name: ${CURRENT_TMUX_SESSION_NAME}"
+  decho "Current Window index: ${CURRENT_TMUX_WINDOW_INDEX}"
+  decho "Current Pane index: ${CURRENT_TMUX_PANE_INDEX}"
 }
 
 #-----------------

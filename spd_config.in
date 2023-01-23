@@ -40,6 +40,9 @@ SPD_TMUX_SESSION_NAME=spd
 
 SPD_TMUX_USE_USER_SOCKET=${TRUE}
 
+# Create the grid where the script is called.
+SPD_GRID_LOCAL=${FALSE}
+
 #===========
 # Display
 
