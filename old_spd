@@ -21,8 +21,6 @@ ERROR_PIPE=2
 ERROR_SEND_CMD=3
 # The requested mode for the master is incorrect
 ERROR_PANE_MODE=4
-# The requested mode for the master is incorrect
-ERROR_PANE_KILL=5
 
 #Pane orientation choices
 VERTICAL=v
@@ -144,98 +142,33 @@ set -e
     #Ensure this session is the current one by attaching to it if more than one
     local tmux_nsession=$( ${TMUX_CMD} ls | wc -l )
     echo "#sessions: ${tmux_nsession}"
-    # TODO Make it a choice: attach/switch or not.
-   #if [ ${tmux_nsession} -gt 1 ]; then
-   #  if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
-   #    ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
-   #  else
-   #    ${TMUX_CMD} switch-client -t ${SPD_TMUX_SESSION_NAME}
-   #   #sleep 2
-   #  fi
-   #fi
+    if [ ${tmux_nsession} -gt 1 ]; then
+      if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
+        ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
+      else
+        ${TMUX_CMD} switch-client -t ${SPD_TMUX_SESSION_NAME}
+       #sleep 2
+      fi
+    fi
   fi
 
   #================
-  # Create the mapping
+  # Generate the grid 
   #================
-  step "Creation of the mapping"
-
-  local nrow_per_window=0
-  if [ ${PAGING} -eq ${TRUE} ]; then
-    nrow_per_window=${NROW_PER_PAGE}
-  else
-    nrow_per_window=${P}
-  fi
-
-  # We generate the mapping beforehand as we need to know
-  # in the sparse case the list of active rows.
-  local nnz_row=0
-  local sparse_grid_params=""
+  step "Generation of the grid"
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     decho "Creation of sparse grid"
-    create_sparse_grid ${P} ${Q} ${nrow_per_window} ${RANK_LIST[@]}
-
-    # Count the total number of non-empty rows
-    for i in $( seq 0 $((P - 1)) ); do
-      local nlrank=$(( ${ROW_PTR[ $((i + 1)) ]} - ${ROW_PTR[ ${i} ]} ))
-      decho "Row ${i}: ${nlrank} elements"
-      if [ ${nlrank} -gt 0 ]; then
-        nnz_row=$(( nnz_row + 1 ))
-      fi
-    done
-
-    # Compute the number of ranks in each row
-    sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
-    decho "sparse_grid_params: ${sparse_grid_params}"
-    # TODO if rearrange is used, we should change PANE_ID
-    # OR create another create_sparse_grid
-    # OR pass an extra parameter to create_sparse_grid to rearrange at the
-    # same time.
+    create_sparse_grid ${P} ${Q} ${RANK_LIST[@]}
   else
     decho "Creation of dense grid"
-    create_dense_grid ${P} ${Q} ${nrow_per_window}
-
-    nnz_row=${P}
-  fi
-
-  # Count the number of pages needed:
-  # - if paging is not requested, only one window will be created.
-  local nwindows=0
-  if [ ${PAGING} -eq ${TRUE} ]; then
-    local PYTHONCMD="from math import ceil; "
-    PYTHONCMD+="print( ceil(${nnz_row}/${NROW_PER_PAGE}) )"
-    nwindows=$( ${PYTHON_BIN} -c "${PYTHONCMD}" )
-    decho "nwindows: ${nwindows}"
-  else
-    nwindows=1
-  fi
-
-  #================
-  step "Creation of the grid"
-  #================
-
-  if [ ${SPD_UPDATE_PANES} -eq ${FALSE} ]; then
-    # TODO here it would not work if no socket given
-    decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-      --tmux_session ${SPD_TMUX_SESSION_NAME} \
-      --tmux_initial_window_id ${MASTER_WINDOW} \
-      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-      --create_with_master ${TRUE} --nrow ${nnz_row} \
-      ${sparse_grid_params}
-    ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
-      --tmux_session ${SPD_TMUX_SESSION_NAME} \
-      --tmux_initial_window_id ${MASTER_WINDOW} \
-      --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-      --create_with_master ${TRUE} --nrow ${nnz_row} \
-      ${sparse_grid_params}
+    create_dense_grid ${P} ${Q}
   fi
 
   #================
   # Launch the execution
   #================
   # Export some var in the env of the master
-  setup_pane_env ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} \
-    ${MASTER_PANE} ${MASTER_RANK} ${MASTER_HOST}
+  setup_pane_env ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} ${MASTER_PANE} ${MASTER_RANK} ${MASTER_HOST}
 
   if [ ${PANE_MODE} == "gdb" ]; then
     start_gdbserver
@@ -246,10 +179,77 @@ set -e
   fi
 
   #================
-  step "Map the ranks onto the grid"
-  #----------------
+  # Create the env for the panes
+  #================
+  step "Creation of the pane(s)"
 
-  map_ranks ${MASTER_WINDOW} ${nwindows} ${nrow_per_window}
+  # Count the total number of non-empty rows
+  local ntotal_active_rows=0
+  local nlrank=0
+  for i in $( seq 0 $((P - 1)) ); do
+    nlrank=$(( ${ROW_PTR[ $((i + 1)) ]} - ${ROW_PTR[ ${i} ]} ))
+    decho "Row ${i}: ${nlrank} elements"
+    if [ ${nlrank} -gt 0 ]; then
+      ntotal_active_rows=$(( ntotal_active_rows + 1 ))
+    fi
+  done
+
+  # Count the number of pages needed:
+  # - if paging is not requested, only one window will be created.
+  local nrowToDisplay=0
+  local nwindows=0
+  if [ ${PAGING} -eq ${TRUE} ]; then
+    nrowToDisplay=${NROW_PER_PAGE}
+    local PYTHONCMD="from math import ceil; "
+    PYTHONCMD+="print( ceil(${ntotal_active_rows}/${NROW_PER_PAGE}) )"
+    nwindows=$( ${PYTHON_BIN} -c "$PYTHONCMD" )
+    decho "nwindows: ${nwindows}"
+  else
+    nrowToDisplay=$P
+    nwindows=1
+  fi
+
+  local nrowDisplayed=0
+  local npaneDisplayed=0
+  local rowToDisplay=()
+
+  # Compute the list of rows to display.
+  # NOTE: This function returns the array rowToDisplay
+  compute_list_rows_to_display ${nrowDisplayed} ${P} \
+    ${nrowToDisplay} ${ROW_PTR[@]}
+  rowToDisplay=( ${_RETVAL[@]} )
+  # Cleaning 
+  unset _RETVAL
+
+  for window_id in $( seq 0 $((nwindows - 1)) ); do 
+    # If more than one window, get the number of rows and create the
+    # associated window
+    if [ ${window_id} -gt 0 ]; then
+      compute_list_rows_to_display ${nrowDisplayed} ${P} \
+        ${nrowToDisplay} ${ROW_PTR[@]}
+      rowToDisplay=( ${_RETVAL[@]} )
+      # Cleaning 
+      unset _RETVAL
+
+      local window_name="Range_${rowToDisplay[0]}"\
+        "_${rowToDisplay[$(( ${#rowToDisplay[@]} - 1))]}"
+      create_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${window_name}
+    fi
+    nlactive_rows=${#rowToDisplay[@]}
+    decho "[Page:${window_id}] nactive_row: ${nlactive_rows}"
+
+    decho "Rows to display: ${rowToDisplay[@]}"
+    display_panes_in_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${nrowDisplayed} \
+      ${npaneDisplayed} ${rowToDisplay[@]}
+    cur_npane_displayed=${_RETVAL}
+    # Cleaning
+    unset _RETVAL
+
+    nrowDisplayed=$(( nrowDisplayed + ${#rowToDisplay[@]} ))
+    npaneDisplayed=$(( npaneDisplayed + cur_npane_displayed ))
+
+    setup_window_panes ${SPD_TMUX_SESSION_NAME} ${window_id} ${rowToDisplay[@]}
+  done
 
   #================
   # Launch the execution
@@ -376,54 +376,29 @@ chelp() {
   echo -e "\t\t\t\tGeneral Commands Manual"
   bold    "NAME"
   echo -e "\t$0 - spd allows the split of ranks into a specific pane"
-
   bold    "SYNOPSIS"
   echo -e "\t$0 [OPTIONS] --exec <exec_name> --run <commandline>"
-
-  bold    "\t--exec <path/exec_name: DEFAULT ${EXEC_NAME-}>"
+  bold    "\t--exec <exec_name>"
   echo -e "\t\tThe name of the executable that is used to split the <commandline>"
   echo -e "\t\tso that the MPI parameters and the executable parameters can be found."
-
   bold    "\t--run <commandline>"
   echo -e "\t\tThe commandline as used in a classic run"
-
+  
   bold    "DESCRIPTION"
   echo -e "\tNone"
-
+  
   bold    "OPTIONS"
-  bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
-  echo -e "\t\tAllows the user to not recreate the grid."
-
-  bold    "\t--dev"
-  echo -e "\t\t[DEV purpose only] Enable DEV_MODE."
-
-  bold    "\t--gdb"
-  echo -e "\t\tRequest each rank to run gdb."
-
-  bold    "\t--gdb_add_cmd <gdb_commands: DEFAULT ${GDB_ADDITIONAL_CMD:-}>"
-  echo -e "\t\tPass additional command to each gdb instances." \
-          "\t\tNOTE: previous name gdbaddcmd DEPRECATED."
-
-  bold    "\t-h, --help"
-  echo -e "\t\tPrint this message."
-
   bold    "\t-p <int: DEFAULT ${P-}>"
-  echo -e "\t\tThe number of hosts."
-
-  bold    "\t--paging <int: DEFAULT ${NROW_PER_PAGE:-}"
-  echo -e "\t\tEnable paging the ranks displayed <int> rows per window."
-
-  bold    "\t--port <int: DEFAULT ${PORT-}>"
-  echo -e "\t\tThe number of hosts."
-
+  echo -e "\t\tThe number of hosts"
+  
   bold    "\t-q <int: DEFAULT ${Q-}>"
-  echo -e "\t\tThe number of MPI processes per host."
-
+  echo -e "\t\tThe number of MPI processes per host"
+  
   bold    "\t--ranks <int,...>"
   echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
-
-  bold    "\t--split"
-  echo -e "\t\tRequest each rank to redirect their output to dedicated pane."
+  
+  bold    "\t--paging"
+  echo -e "\t\tCreate paging window."
 
   bold    "REMARKS"
   bold    "EXAMPLES"
@@ -444,39 +419,7 @@ parse_param() {
   local answer=""
 
   while [ $# -gt 0 ]; do
-    # Alphabetic order
     case $1 in
-     #--attach)
-     #  ATTACH=$TRUE
-     #  shift
-     #  ;;
-      --create_grid)
-        shift
-        SPD_UPDATE_PANES=${TRUE}
-        if [ $1 -eq 0 ]; then
-          SPD_UPDATE_PANES=${FALSE}
-        fi
-        shift
-        ;;
-      --dev) #Intent to be removed
-        shift
-        DEV_MODE=${TRUE}
-        ;;
-      --exec)
-        shift
-        EXEC_NAME=$1
-        shift
-        decho "GIVEN ${EXEC_NAME}"
-        ;;
-      --gdb)
-        shift
-        PANE_MODE="gdb"
-        ;;
-      --gdb_add_cmd | --gdbaddcmd)
-        shift
-        GDB_ADDITIONAL_CMD+=" $1"
-        shift
-        ;;
       -h | --help )
         chelp $( basename $0 )
         exit 0
@@ -486,32 +429,55 @@ parse_param() {
         P=$1
         shift
         ;;
-      --paging)
-        shift
-        PAGING=${TRUE}
-        NROW_PER_PAGE=$1
-        shift
-        ;;
-      --port)
-        shift
-        PORT=$1
-        shift
-        ;;
       -q)
         shift
         Q=$1
         shift
         ;;
-      --ranks)
+      --paging)
         shift
-        RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
-        decho "List of provided ranks: ${RANK_LIST[@]}"
+        answer=$1
+        if [[ "${answer}" == 'y' ]]; then
+          PAGING=${TRUE}
+        elif [[ "${answer}" == 'n' ]]; then 
+          PAGING=${FALSE}
+        else
+          warning "Unknown value ${answer} for param '--paging'." \
+            "Use default value."
+          PAGING=${DEFAULT_PAGING}
+        fi
         shift
         ;;
      #--rearrangeGrid) # TODO but not implemented yet
      #  REARRANGEGRID=$TRUE
      #  shift
      #  ;;
+      --port)
+        shift
+        PORT=$1
+        shift
+        ;;
+      --gdbaddcmd)
+        shift
+        GDB_ADDITIONAL_CMD+=" $1"
+        shift
+        ;;
+     #--attach)
+     #  ATTACH=$TRUE
+     #  shift
+     #  ;;
+      --ranks)
+        shift
+        RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
+        decho "List of provided ranks: ${RANK_LIST[@]}"
+        shift
+        ;;
+      --exec)
+        shift
+        EXEC_NAME=$1
+        shift
+        decho "GIVEN ${EXEC_NAME}"
+        ;;
       --run)
         shift
         CMD_LINE=$*
@@ -521,7 +487,14 @@ parse_param() {
         shift
         PANE_MODE="split"
         ;;
-      # Alphabetic order
+      --gdb)
+        shift
+        PANE_MODE="gdb"
+        ;;
+      --dev) #Intent to be removed
+        shift
+        DEV_MODE=${TRUE}
+        ;;
       *)
         echo "$1 unknown argument" 1
         shift
@@ -572,7 +545,63 @@ source_config_and_rc_files() {
 }
 
 #-----------------
+# Window management
+
+# Wrapper over tmux command to create a new window.
+# This function creates a new window with a name in an existing session
+create_window() {
+  local desc="This function creates a new window in an existing session."
+  local tmux_session=$1
+  local window_id=$2
+  shift 2
+  local window_name=( $@ )
+
+  decho "Creation of window id:${window_id} named ${window_name[@]}"\
+    " in Session ${tmux_session}"
+  if [ ${DEV_MODE} -eq ${FALSE} ]; then
+    decho ${TMUX_CMD} new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
+    ${TMUX_CMD} new-window -t ${tmux_session}:${window_id} -n "${window_name[@]}"
+  fi
+}
+
+# Wrapper over tmux command to select a window
+select_window() {
+  local desc="This function selects a specific window in a session."
+  local tmux_session=$1
+  local window_id=$2
+
+  decho "Selection of window id:${window_id} in Session ${tmux_session}"
+  if [ ${DEV_MODE} -eq ${FALSE} ]; then
+    decho ${TMUX_CMD} select-window -t ${tmux_session}:${window_id}
+    ${TMUX_CMD} select-window -t ${tmux_session}:${window_id}
+  fi
+}
+
+#-----------------
 # Pane management
+
+# Wrapper over tmux command to split a pane in order to create a pane
+create_pane() {
+  local desc="This function splits an existing pane to get a new pane."
+    desc+="It also starts a bash in the new pane."
+  local tmux_session=$1
+  local window_id=$2
+  local parent_pane_id=$3
+  local orientation=$4
+  local pane_size=$5
+
+  local cmd="bash"
+
+  decho "Parent_pane_id: ${parent_pane_id}, " \
+    "Orientation: ${orientation}, Size: ${pane_size}"
+  
+  tmux_cmd_sent "${TMUX_CMD} splitw -${orientation} -p ${pane_size} " \
+    "-t ${tmux_session}:${window_id}.${parent_pane_id} \"${cmd}\""
+  if [ ${DEV_MODE} -eq ${FALSE} ]; then
+    ${TMUX_CMD} splitw -${orientation} -p ${pane_size} \
+      -t ${tmux_session}:${window_id}.${parent_pane_id} "${cmd}"
+  fi
+}
 
 # Wrapper over tmux command to send a command to a specific pane.
 send_cmd_to_pane() {
@@ -642,9 +671,6 @@ setup_pane_using_pipe() {
     default_cmd+="cpt=\$(( cpt + 1)); "
     default_cmd+="done"
 
-    # DEBUG purpose
-    default_cmd="cat < ${pane_pipe}"
-
     cmd=${SPD_PIPE_LISTENING_CMD:-${default_cmd}}
 
     send_cmd_to_pane ${tmux_session} ${window_id} ${pane_id} ${cmd}
@@ -682,21 +708,102 @@ compute_pane_size() {
   _RETVAL=$((100 - 100 / (ntotal_col - col_already_created + 1) ))
 }
 
-map_ranks_to_window(){
+display_panes_in_window(){
+  local desc="This function creates the panes of a specific window."
+  local tmux_session=$1
+  local window_id=$2
+  local row_offset=$3
+  local pane_offset=$4
+  shift 4
+  local row_idx=( $@ )
+
+  # Select the window
+  select_window ${tmux_session} ${window_id}
+
+  ## Create the rows first
+  local nrow_created=0
+  local nlpane_created=0
+  local pane_size=$(( 100 - MASTER_PANE_SIZE ))
+  local orientation=${HORIZONTAL}
+  local nlrank=0
+  local host=0
+  local pane_ptr=0
+  local pane_idx=0
+  local pane_rank=0
+  local col_pane_ancestor_id=0
+
+  # A row may be empty. But, otherwise, we need to create the space for at least
+  # one pane.
+  for p in ${row_idx[@]}; do
+    nlrank=$(( ${ROW_PTR[$((p + 1))]} - ${ROW_PTR[$p]} ))
+    if [ ${nlrank} -eq 0 ]; then 
+      continue
+    fi
+
+    if [ ${nrow_created} -gt 0 ]; then
+      compute_pane_size ${nactive_Row} ${nrow_created}
+      pane_size=${_RETVAL}
+      orientation=${VERTICAL}
+      # Cleaning
+      unset _RETVAL
+    fi
+    pane_ptr=${ROW_PTR[ ${p} ]}
+    pane_idx=${PANE_ID[ ${pane_ptr} ]}
+    pane_rank=${PANE_RANK[ ${pane_ptr} ]}
+    col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_ptr} ]} - ${row_offset} ))
+
+    # This creates the first pane of the current row.
+    create_pane ${tmux_session} ${window_id} $col_pane_ancestor_id $orientation $pane_size
+    setup_pane_env ${tmux_session} ${window_id} ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
+
+    nrow_created=$(( nrow_created + 1 ))
+  done
+
+  decho "Creation of ${nrow_created} rows completed for window ${window_id}"
+
+  # Creation of the panes as a grid PxQ, row by row
+  for p in ${row_idx[@]}; do
+    nlrank=$(( ${ROW_PTR[$((p + 1))]} - ${ROW_PTR[$p]} ))
+    if [ $nlrank -eq 0 ]; then 
+      continue
+    fi
+
+    decho "Add ${nlrank} for row ${p}"
+    nlpane_created=$(( nlpane_created + nlrank ))
+
+    for q in $( seq 1 $((nlrank - 1)) ); do
+      compute_pane_size ${nlrank} ${q}
+     #pane_size=$((100 - 100 / (nlrank - q + 1) ))
+      pane_size=${_RETVAL}
+      pane_ptr=$(( ${ROW_PTR[ ${p} ]} + q ))
+      pane_idx=${PANE_ID[ ${pane_ptr} ]}
+      pane_rank=${PANE_RANK[ ${pane_ptr} ]}
+      col_pane_ancestor_id=$(( ${PANE_ANCESTOR_ID[ ${pane_ptr} ]} - ${pane_offset} ))
+      decho "col_pane_ancestor_id=${PANE_ANCESTOR_ID[$pane_ptr]} - ${pane_offset}"
+      # Cleaning
+      unset _RETVAL
+
+      create_pane ${tmux_session} ${window_id} ${col_pane_ancestor_id} ${HORIZONTAL} ${pane_size}
+      setup_pane_env ${tmux_session} ${window_id} ${pane_idx} ${pane_rank} ${HOSTS[ ${p} ]}
+    done
+  done
+
+  decho "Returned nlpane_created:${nlpane_created}"
+  _RETVAL=${nlpane_created}
+}
+
+setup_window_panes(){
   local desc="This function setups each pane of a window."
   local tmux_session=$1
   local window_id=$2
   shift 2
   local row_idx=( $@ )
 
+  # Select the window
+  select_window $tmux_session $window_id
+
   local nlpane_setup=0
   local nlrank=0
-  local pane_ptr=0
-  local pane_idx=0
-  local pane_rank=0
-  local pane_port=0
-
-  # TODO update the name of the window with the ranks displayed in.
 
   # Creation of the panes as a grid PxQ, row by row
   for p in ${row_idx[@]}; do
@@ -750,57 +857,59 @@ is_active_rank() {
 #   2/ number of columns
 create_dense_grid() {
   local desc="This function creates a dense grid where "
-    desc+="each pane is associated with a rank."
+    desc+="each pane is associated with a rank and an ancestor pane."
   local nrow=$1
   local ncol=$2
-  local nrow_per_window=$3
 
   local lrow_ptr=()
   local lpane_id=()
+  local lpane_ancestor_id=()
   local lpane_rank=()
   local nval=0
-  local pane_id=0
-  local with_pane_master=1
 
   # init the value to te first pane, i.e., pane -t 0
- #local is_row_leader=${TRUE}
+  local row_ancestor=0
+  local col_ancestor=0
+  local is_row_leader=${TRUE}
   lrow_ptr+=( 0 )
-
-  # We offset the paneId when a master exists
-  if [ ${with_pane_master} -eq 1 ]; then
-    pane_id=1
-  fi
 
   # For each row
   for p in $( seq 1 ${nrow} ); do
+    is_row_leader=${TRUE}
+
     # For each column
     for q in $( seq 0 $((ncol - 1)) ); do
+      if [ ${is_row_leader} -eq ${TRUE} ]; then
+        pane_ancestor=${col_ancestor}
+        col_ancestor=${p}
+        is_row_leader=${FALSE}
+      else
+        pane_ancestor=${row_ancestor}
+      fi
       # Compute rank associated with the entry (p, q) in the grid
       cur_rank=$(( (p - 1) * ncol + q ))
-
-      lpane_id+=( ${pane_id} )
-      lpane_rank+=( ${cur_rank} )
-
       nval=$((nval + 1))
-      pane_id=$((pane_id + 1))
+
+      lpane_id+=( ${nval} )
+      lpane_rank+=( ${cur_rank} )
+      lpane_ancestor_id+=( ${pane_ancestor} )
+
+      # Change the row ancestor 
+      row_ancestor=${nval}
     done
     # Save the number of elements in the row p
     lrow_ptr+=( ${nval} )
-
-    # Reset some values if moving to next window.
-    if [ $(expr ${p} % ${nrow_per_window} ) -eq 0 ]; then
-      pane_id=0
-      with_pane_master=0
-    fi
   done
   decho "rowPtr         ${lrow_ptr[@]}"
   decho "paneId         ${lpane_id[@]}"
   decho "paneRanks      ${lpane_rank[@]}"
+  decho "paneAncestorId ${lpane_ancestor_id[@]}"
 
   # Return arrays
   ROW_PTR=( ${lrow_ptr[@]} )
   PANE_ID=( ${lpane_id[@]} )
   PANE_RANK=( ${lpane_rank[@]} )
+  PANE_ANCESTOR_ID=( ${lpane_ancestor_id[@]} )
 }
 
 # This routine creates a regular grid in a CSR format.
@@ -813,35 +922,28 @@ create_sparse_grid() {
     desc+="where only the given ranks are inserted."
   local nrow=$1
   local ncol=$2
-  local nrow_per_window=$3
-  shift 3
+  shift 2
   local ranks=( $@ )
 
   local lrow_ptr=()
   local lpane_id=()
+  local lpane_ancestor_id=()
   local lpane_rank=()
-  local lnnz_row_ptr=()
   local nval=0
-  local lrow_is_empty=${TRUE}
-  local nrow_non_empty=0
-  local pane_id=0
   local size=$(( nrow * ncol ))
   local cur_rank=0
-  local with_pane_master=1
 
   # init the value to te first pane, i.e., pane -t 0
   local row_counter=0
-
+  local col_ancestor=0 # XXX assuming the gdbserver pane is 0
+  local row_ancestor=0
+  local is_row_leader=${TRUE}
   lrow_ptr+=( 0 )
-
-  # We offset the paneId when a master exists
-  if [ ${with_pane_master} -eq 1 ]; then
-    pane_id=1
-  fi
 
   # For each row of a dense grid
   for p in $( seq 1 ${nrow} ); do
-    lrow_is_empty=${TRUE}
+    is_row_leader=${TRUE}
+
     # For each col of a dense grid
     for q in $( seq 0 $((ncol - 1)) ); do
       # Compute rank associated with the entry (p, q) in the grid
@@ -851,62 +953,52 @@ create_sparse_grid() {
       is_active_rank ${cur_rank} ${ranks[@]}
 
       if [ ${ACTIVE_RANK} -eq ${TRUE} ]; then
-        lpane_id+=( ${pane_id} )
-        lpane_rank+=( ${cur_rank} )
-        
+        if [ ${is_row_leader} -eq ${TRUE} ]; then
+          row_counter=$((row_counter + 1))
+          ancestor=${col_ancestor}
+          col_ancestor=${row_counter}
+          is_row_leader=${FALSE}
+        else
+          ancestor=${row_ancestor}
+        fi
         nval=$((nval + 1))
-        lrow_is_empty=${FALSE}
-        pane_id=$((pane_id + 1))
+
+        lpane_id+=( ${nval} )
+        lpane_rank+=( ${cur_rank} )
+        lpane_ancestor_id+=( ${ancestor} )
+        
+        row_ancestor=${nval}
       fi
       # Clean what was created by the call to is_active_rank
       unset ACTIVE_RANK
     done
     lrow_ptr+=( ${nval} )
-
-    # Increase the number of non-empty rows.
-    if [ ${lrow_is_empty} -eq ${FALSE} ]; then
-      nrow_non_empty=$(( nrow_non_empty + 1 ))
-    fi
-
-    # Reset some values if moving to next window.
-    if [ $(expr ${nrow_non_empty} % ${nrow_per_window} ) -eq 0 ]; then
-      pane_id=0
-      with_pane_master=0
-    fi
   done
-
-  # nnz ROW_PTR
-  for p in $( seq 0 $(( nrow - 1 )) ); do
-    local nlelement=$(( ${lrow_ptr[$(( p + 1 ))]} - ${lrow_ptr[${p}]} ))
-    if [ ${nlelement} -ne 0 ]; then
-      lnnz_row_ptr+=( ${nlelement} )
-    fi
-  done
-
-  decho "rowPtr           ${lrow_ptr[@]}"
-  decho "paneId           ${lpane_id[@]}"
-  decho "paneRanks        ${lpane_rank[@]}"
-  decho "Elements on rows ${lnnz_row_ptr[@]}"
+  decho "rowPtr         ${lrow_ptr[@]}"
+  decho "paneId         ${lpane_id[@]}"
+  decho "paneRanks      ${lpane_rank[@]}"
+  decho "paneAncestorId ${lpane_ancestor_id[@]}"
 
   # Return arrays
   ROW_PTR=( ${lrow_ptr[@]} )
   PANE_ID=( ${lpane_id[@]} )
   PANE_RANK=( ${lpane_rank[@]} )
-  NNZ_ROW_PTR=( ${lnnz_row_ptr[@]} )
+  PANE_ANCESTOR_ID=( ${lpane_ancestor_id[@]} )
 }
 
 compute_list_rows_to_display() {
   local desc="This function creates a list of rows to display in a window."
   local nrow_start=$1
-  local page_max_nrow=$2
-  shift 2
+  local nrow_total=$2
+  local page_max_nrow=$3
+  shift 3
   local row_ptr=( $@ )
 
   local nlrank=0
   local nlactive_row=0
   local lrow_to_display=()
 
-  for i in $(seq ${nrow_start} $((P - 1)) ); do
+  for i in $(seq $nrow_start $((nrow_total - 1)) ); do
     nlrank=$(( ${row_ptr[ $((i + 1)) ]} - ${row_ptr[ ${i} ]} ))
     decho "Row ${i}: ${nlrank} elements"
 
@@ -921,27 +1013,6 @@ compute_list_rows_to_display() {
 
   # Returned value
   _RETVAL=( ${lrow_to_display[@]} )
-}
-
-map_ranks(){
-  local desc="This functions maps the ranks to the panes."
-  local initial_window=$1
-  local nwindows=$2
-  local nrow_per_window=$3
-
-  local nrow_displayed=0
-  local lrow_to_display=()
-
-  # Map ranks to panes
-  for window_id in $( seq ${initial_window} $((nwindows + initial_window - 1)) ); do 
-    compute_list_rows_to_display ${nrow_displayed} ${nrow_per_window} ${ROW_PTR[@]}
-    lrow_to_display=( ${_RETVAL[@]} )
-    decho "[W:${window_id}] ${lrow_to_display[@]} rows to display in window ${window_id}"
-
-    map_ranks_to_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${lrow_to_display[@]}
-
-    nrow_displayed=$(( nrow_displayed + ${#lrow_to_display[@]} ))
-  done
 }
 
 #-----------------
