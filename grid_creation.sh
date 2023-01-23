@@ -20,10 +20,19 @@ TMUX_CMD="tmux"
 VERTICAL=v
 HORIZONTAL=h
 
+# Different location
+LOCATION_DEFAULT=-1
+LOCATION_SAME_WINDOW=0
+LOCATION_NEXT_WINDOW=1
+LOCATION_USER_DEFINED=2
+
 #-------------------
 # Codes retuned when:
 # The grid dimension does not match
 ERROR_GRID_DIM=1
+
+# The given location integer is unknown
+ERROR_GRID_UNKNOWN_LOCATION=2
 
 # Pseudo code
 # Considering a 3D grid to display of size x,y,z
@@ -69,22 +78,25 @@ main(){
     TMUX_CMD+=" -S ${GRID_MANAGER_USER_TMUX_TMPDIR}"
   fi
   decho "TMUX_CMD: ${TMUX_CMD}"
+
+  select_tmux_location
   
   #================
   # Main
   #================
+  # TODO pass master pane_id
   if [ ${#NELEMENT_PER_ROW[@]} -gt 0 ]; then
     create_3d_sparse_grid ${DIM_X} ${DIM_Y} ${DIM_Z} \
-      ${GRID_MANAGER_TMUX_SESSION_NAME} \
-      ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
+      ${TMUX_SESSION_NAME} \
+      ${TMUX_INITIAL_WINDOW_ID} \
       ${GRID_MANAGER_WITH_MASTER} ${NELEMENT_PER_ROW[@]}
   else
     if [ ${GRID_MANAGER_NROW} -eq 0 ]; then
       GRID_MANAGER_NROW=$(( DIM_X * DIM_Z ))
     fi
     create_3d_regular_grid ${DIM_X} ${DIM_Y} ${DIM_Z} ${GRID_MANAGER_NROW} \
-      ${GRID_MANAGER_TMUX_SESSION_NAME} \
-      ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID} \
+      ${TMUX_SESSION_NAME} \
+      ${TMUX_INITIAL_WINDOW_ID} \
       ${GRID_MANAGER_WITH_MASTER}
   fi
 }
@@ -367,6 +379,47 @@ compute_pane_size() {
   _RETVAL=$((100 - 100 / (dim - i + 1) ))
 }
 
+get_tmux_info() {
+  local desc="This function gets the actual tmux session, window and pane info."
+
+  # XXX Is it worth doing a single call and parse it?
+  CURRENT_TMUX_SESSION_NAME=$( ${TMUX_CMD} display-message -p '#{session_name}' )
+  CURRENT_TMUX_WINDOW_INDEX=$( ${TMUX_CMD} display-message -p '#{window_index}' )
+  CURRENT_TMUX_PANE_INDEX=$( ${TMUX_CMD} display-message -p '#{pane_index}' )
+
+  decho "Current Session name: ${CURRENT_TMUX_SESSION_NAME}"
+  decho "Current Window index: ${CURRENT_TMUX_WINDOW_INDEX}"
+  decho "Current Pane index: ${CURRENT_TMUX_PANE_INDEX}"
+}
+
+# TODO define default behavior outside?
+select_tmux_location() {
+  local desc="This function defines the session, window and pane to use."
+
+  # Get the info of the current TMUX
+  get_tmux_info
+
+  if [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_SAME_WINDOW} ]; then
+    TMUX_SESSION_NAME=${CURRENT_TMUX_SESSION_NAME}
+    TMUX_INITIAL_WINDOW_ID=${CURRENT_TMUX_WINDOW_INDEX}
+  elif [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_NEXT_WINDOW} ]; then
+    TMUX_SESSION_NAME=${CURRENT_TMUX_SESSION_NAME}
+    TMUX_INITIAL_WINDOW_ID=$(( CURRENT_TMUX_WINDOW_INDEX + 1 ))
+  elif [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_USER_DEFINED} ]; then
+    TMUX_SESSION_NAME=${USER_LOCATION_SESSION_NAME:-${CURRENT_TMUX_SESSION_NAME}}
+    TMUX_INITIAL_WINDOW_ID=${USER_LOCATION_WINDOW_ID:-${CURRENT_TMUX_WINDOW_INDEX}}
+  elif [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_DEFAULT} ]; then
+    TMUX_SESSION_NAME=${CURRENT_TMUX_SESSION_NAME}
+    TMUX_INITIAL_WINDOW_ID=${CURRENT_TMUX_WINDOW_INDEX}
+  else 
+    TMUX_SESSION_NAME=${GRID_MANAGER_TMUX_SESSION_NAME}
+    TMUX_INITIAL_WINDOW_ID=${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID}
+  fi
+
+  decho "Selected Session name: ${TMUX_SESSION_NAME}"
+  decho "Selected Window index: ${TMUX_INITIAL_WINDOW_ID}"
+ #decho "Selected Pane index: ${TMUX_PANE_INDEX}"
+}
 
 ################################################################################
 #                      Auxiliary Functions                                    #
@@ -509,6 +562,14 @@ chelp() {
   echo -e "\t\tList of number of panes per row."
   echo -e "\t\tNOTES: Must be the last one as a list is expected."
 
+  bold    "\t-l, --location [ cw | nw | w | s ]"
+  echo -e "\t\tChange the location where the grid is created."
+  echo -e "\t\tOptions:"
+  echo -e "\t\t\t\tcw | current_window"
+  echo -e "\t\t\t\tnw | next_window"
+  echo -e "\t\t\t\tw | window <int> Index of the window where to start."
+  echo -e "\t\t\t\ts | session <session_name> Name of the tmux session to use."
+
   bold    "REMARKS"
   echo -e "\t\tIf the flag --rows_size is used, it MUST be the last one" \
           " as a list is expected."
@@ -523,7 +584,7 @@ parse_param() {
   while [ $# -gt 0 ]; do
     case $1 in
       # Alphabetic order
-      --create_with_master)
+      --create_with_master) # TODO change it to pass a pane index
         shift
         GRID_MANAGER_WITH_MASTER=${FALSE}
         if [ $1 -ne 0 ]; then
@@ -539,9 +600,25 @@ parse_param() {
         chelp $( basename $0 )
         exit 0
         ;;
+      -l | --location)
+        shift
+        # TODO Should we have SPD_TMUX_USE_USER_SOCKET=${FALSE}?
+        local user_location_params=()
+        # Get all params related to location
+        while [ $# -gt 0 ]; do
+          local argv="$1"
+          if [ ${argv::1} == "-" ]; then
+            break
+          fi
+          user_location_params+=( ${argv} )
+          shift
+        done
+        get_user_location ${user_location_params[@]}
+        ;;
       --nrow)
         shift
         GRID_MANAGER_NROW=$1
+        shift
         ;;
       --rows_size) # MUST be the last
         shift
@@ -560,6 +637,7 @@ parse_param() {
         ;;
       --tmux_socket)
         shift
+        # TODO Should we have SPD_TMUX_USE_USER_SOCKET=${TRUE}?
         GRID_MANAGER_USER_TMUX_TMPDIR=$1
         shift
         ;;
@@ -585,6 +663,46 @@ parse_param() {
         ;;
     esac
   done
+}
+
+# Expect [ location [info] ]
+get_user_location() {
+  local desc="This function returns the location where to create the grid."
+
+  decho "Location input params: $@"
+
+  # If nothing given, default to local to the current window/pane
+  if [ $# -eq 0 ]; then
+    GRID_MANAGER_LOCATION=${LOCATION_DEFAULT}
+  else
+    while [ $# -gt 0 ]; do
+      case $1 in
+        current_window | cw)
+          shift
+          GRID_MANAGER_LOCATION=${LOCATION_SAME_WINDOW}
+          ;;
+        next_window | nw)
+          shift
+          GRID_MANAGER_LOCATION=${LOCATION_NEXT_WINDOW}
+          ;;
+        window=* | w=*)
+          GRID_MANAGER_LOCATION=${LOCATION_USER_DEFINED}
+          # TODO check it is correct.
+          USER_LOCATION_WINDOW_ID=$( echo $1 | cut -d '=' -f 2 )
+          shift
+          ;;
+        session=* | s=*)
+          GRID_MANAGER_LOCATION=${LOCATION_USER_DEFINED}
+          # TODO check it is correct.
+          USER_LOCATION_SESSION_NAME=$( echo $1 | cut -d '=' -f 2 )
+          shift
+          ;;
+        *)
+          error "Given location ${given_location} is unknown." \
+            ${ERROR_GRID_UNKNOWN_LOCATION}
+        esac
+    done
+  fi
 }
 
 source_config_and_rc_files() {
