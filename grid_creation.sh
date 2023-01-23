@@ -71,7 +71,9 @@ main(){
 
   bold "Parsed information:"
   echo "Execution : grid ${DIM_X}*${DIM_Y}*${DIM_Z}"
-  echo "Sparse: ${NELEMENT_PER_ROW[@]}"
+  if [ ${#NELEMENT_PER_ROW[@]} -gt 0 ]; then
+    echo "Sparse: ${NELEMENT_PER_ROW[@]}"
+  fi
 
   # Update the TMUX command that is used by inner functions
   if [ ${GRID_MANAGER_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
