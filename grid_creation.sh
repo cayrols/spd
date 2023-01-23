@@ -410,9 +410,6 @@ select_tmux_location() {
   elif [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_USER_DEFINED} ]; then
     TMUX_SESSION_NAME=${USER_LOCATION_SESSION_NAME:-${CURRENT_TMUX_SESSION_NAME}}
     TMUX_INITIAL_WINDOW_ID=${USER_LOCATION_WINDOW_ID:-${CURRENT_TMUX_WINDOW_INDEX}}
-  elif [ ${GRID_MANAGER_LOCATION} -eq ${LOCATION_DEFAULT} ]; then
-    TMUX_SESSION_NAME=${CURRENT_TMUX_SESSION_NAME}
-    TMUX_INITIAL_WINDOW_ID=${CURRENT_TMUX_WINDOW_INDEX}
   else 
     TMUX_SESSION_NAME=${GRID_MANAGER_TMUX_SESSION_NAME}
     TMUX_INITIAL_WINDOW_ID=${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID}
@@ -675,7 +672,8 @@ get_user_location() {
 
   # If nothing given, default to local to the current window/pane
   if [ $# -eq 0 ]; then
-    GRID_MANAGER_LOCATION=${LOCATION_DEFAULT}
+    # TODO make it a default value that can be managed from config/rc file
+    GRID_MANAGER_LOCATION=${LOCATION_SAME_WINDOW}
   else
     while [ $# -gt 0 ]; do
       case $1 in

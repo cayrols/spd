@@ -52,6 +52,10 @@ GRID_MANAGER_TMUX_USE_USER_SOCKET=${TRUE}
 
 # Consider a master pane
 GRID_MANAGER_WITH_MASTER=${TRUE}
+
+# Overwrite the behavior of the creation of the grid.
+GRID_MANAGER_LOCATION=${LOCATION_DEFAULT}
+
 #===========
 # Display
 
