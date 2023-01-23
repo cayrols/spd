@@ -442,92 +442,99 @@ chelp() {
 parse_param() {
   local desc="This function parses the parameters given to this script."
   local answer=""
+  local argv=$1
 
-  while [ $# -gt 0 ]; do
-    # Alphabetic order
-    case $1 in
-     #--attach)
-     #  ATTACH=$TRUE
-     #  shift
-     #  ;;
-      --create_grid)
-        shift
-        SPD_UPDATE_PANES=${TRUE}
-        if [ $1 -eq 0 ]; then
-          SPD_UPDATE_PANES=${FALSE}
-        fi
-        shift
-        ;;
-      --dev) #Intent to be removed
-        shift
-        DEV_MODE=${TRUE}
-        ;;
-      --exec)
-        shift
-        EXEC_NAME=$1
-        shift
-        decho "GIVEN ${EXEC_NAME}"
-        ;;
-      --gdb)
-        shift
-        PANE_MODE="gdb"
-        ;;
-      --gdb_add_cmd | --gdbaddcmd)
-        shift
-        GDB_ADDITIONAL_CMD+=" $1"
-        shift
-        ;;
-      -h | --help )
-        chelp $( basename $0 )
-        exit 0
-        ;;
-      -p)
-        shift
-        P=$1
-        shift
-        ;;
-      --paging)
-        shift
-        PAGING=${TRUE}
-        NROW_PER_PAGE=$1
-        shift
-        ;;
-      --port)
-        shift
-        PORT=$1
-        shift
-        ;;
-      -q)
-        shift
-        Q=$1
-        shift
-        ;;
-      --ranks)
-        shift
-        RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
-        decho "List of provided ranks: ${RANK_LIST[@]}"
-        shift
-        ;;
-     #--rearrangeGrid) # TODO but not implemented yet
-     #  REARRANGEGRID=$TRUE
-     #  shift
-     #  ;;
-      --run)
-        shift
-        CMD_LINE=$*
-        break
-        ;;
-      --split)
-        shift
-        PANE_MODE="split"
-        ;;
+  # When the first parameter after the program name does not start
+  # with a '-', we consider there is no parameter for spd and we move on.
+  if [ ${argv::1} != "-" ]; then
+    CMD_LINE=$*
+  else
+    while [ $# -gt 0 ]; do
       # Alphabetic order
-      *)
-        echo "$1 unknown argument" 1
-        shift
-        ;;
-    esac
-  done
+      case $1 in
+       #--attach)
+       #  ATTACH=$TRUE
+       #  shift
+       #  ;;
+        --create_grid)
+          shift
+          SPD_UPDATE_PANES=${TRUE}
+          if [ $1 -eq 0 ]; then
+            SPD_UPDATE_PANES=${FALSE}
+          fi
+          shift
+          ;;
+        --dev) #Intent to be removed
+          shift
+          DEV_MODE=${TRUE}
+          ;;
+        --exec)
+          shift
+          EXEC_NAME=$1
+          shift
+          decho "GIVEN ${EXEC_NAME}"
+          ;;
+        --gdb)
+          shift
+          PANE_MODE="gdb"
+          ;;
+        --gdb_add_cmd | --gdbaddcmd)
+          shift
+          GDB_ADDITIONAL_CMD+=" $1"
+          shift
+          ;;
+        -h | --help )
+          chelp $( basename $0 )
+          exit 0
+          ;;
+        -p)
+          shift
+          P=$1
+          shift
+          ;;
+        --paging)
+          shift
+          PAGING=${TRUE}
+          NROW_PER_PAGE=$1
+          shift
+          ;;
+        --port)
+          shift
+          PORT=$1
+          shift
+          ;;
+        -q)
+          shift
+          Q=$1
+          shift
+          ;;
+        --ranks)
+          shift
+          RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
+          decho "List of provided ranks: ${RANK_LIST[@]}"
+          shift
+          ;;
+       #--rearrangeGrid) # TODO but not implemented yet
+       #  REARRANGEGRID=$TRUE
+       #  shift
+       #  ;;
+        --run)
+          shift
+          CMD_LINE=$*
+          break
+          ;;
+        --split)
+          shift
+          PANE_MODE="split"
+          ;;
+        # Alphabetic order
+        *)
+          echo "$1 unknown argument" 1
+          shift
+          ;;
+      esac
+    done
+  fi
 }
 
 source_config_and_rc_files() {
