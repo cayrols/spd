@@ -50,6 +50,7 @@ main() {
   # Determine the root of the script
   SPD_ROOT=$( dirname ${BASH_SOURCE[0]} )
   decho "SPD_ROOT: ${SPD_ROOT}"
+  GRID_MANAGER_ROOT=${GRID_MANAGER_ROOT:-${SPD_ROOT}}
 
   source_config_and_rc_files
 
@@ -216,13 +217,15 @@ set -e
 
   if [ ${SPD_UPDATE_PANES} -eq ${FALSE} ]; then
     # TODO here it would not work if no socket given
-    decho ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+    decho ${GRID_MANAGER_ROOT}/grid_creation.sh \
+      -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
       --tmux_session ${SPD_TMUX_SESSION_NAME} \
       --tmux_initial_window_id ${MASTER_WINDOW} \
       --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
       --create_with_master ${TRUE} --nrow ${nnz_row} \
       ${sparse_grid_params}
-    ./grid_creation.sh -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
+    ${GRID_MANAGER_ROOT}/grid_creation.sh \
+      -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
       --tmux_session ${SPD_TMUX_SESSION_NAME} \
       --tmux_initial_window_id ${MASTER_WINDOW} \
       --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
