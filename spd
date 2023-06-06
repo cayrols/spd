@@ -224,7 +224,7 @@ set -e
   step "Creation of the grid"
   #================
 
-  if [ ${SPD_UPDATE_PANES} -eq ${FALSE} ]; then
+  if [ ${SPD_UPDATE_PANES} -eq ${TRUE} ]; then
     local grid_params="
       -x ${nrow_per_window} -y ${Q} -z ${nwindows} \
       --tmux_session ${SPD_TMUX_SESSION_NAME} \

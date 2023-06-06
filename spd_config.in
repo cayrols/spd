@@ -56,7 +56,7 @@ NROW_PER_PAGE=2
 MASTER_PANE_SIZE=30
 
 # Enable / Disable creation of the grid
-SPD_UPDATE_PANES=${FALSE}
+SPD_UPDATE_PANES=${TRUE}
 
 #===========
 #===========
