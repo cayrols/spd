@@ -154,7 +154,7 @@ int main( int argc, char *argv[])
     if (given_param > 0  && given_param <= N_EXAMPLE)
       example = given_param;
     else {
-      fprintf( stderr, "Error, value %d incorrect.\n" );
+      fprintf( stderr, "Error, value %d incorrect.\n", given_param );
       return PARAM_ERROR;
     }
   }
@@ -166,10 +166,6 @@ int main( int argc, char *argv[])
   MPI_Comm_size( comm, &size );
 
   printf( "MPI info %d/%d\n", rank, size );
-
-  example = example_buffer_overflow;
-  example = example_freed_memory;
-  example = example_double_free;
 
   switch (example) {
     case example_buffer_overflow:
