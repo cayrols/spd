@@ -3,25 +3,31 @@
 # Used to avoid errors when executed.
 set -euo pipefail
 
+#==========================
+# Coding rules
+#
 # Capital varname are global var
 # Lower case varname is used for local var
 # All var must be ${}
 # For each function, a desc local var is used
 
+################################################################################
+#                           Constants and variables                            #
+################################################################################
+# Boolean constants
 TRUE=1
 FALSE=0
 
-#-------------------
 # Codes retuned when:
-# The input MPI params are not working
+# - The input MPI params are not working
 ERROR_MPI_PARAMS=1
-# A pipe cannot be created
+# - A pipe cannot be created
 ERROR_PIPE=2
-# A command cannot be sent to a pane
+# - A command cannot be sent to a pane
 ERROR_SEND_CMD=3
-# The requested mode for the master is incorrect
+# - The requested mode for the master is incorrect
 ERROR_PANE_MODE=4
-# The requested mode for the master is incorrect
+# - The requested mode for the master is incorrect
 ERROR_PANE_KILL=5
 
 #Pane orientation choices
@@ -38,6 +44,12 @@ MASTER_WINDOW=0
 MASTER_RANK=0
 MASTER_HOST=NONE
 
+# Name of this script
+SCRIPT_NAME=$(basename $0)
+
+################################################################################
+#                                 Main function                                #
+################################################################################
 main() {
   local desc="This function is the main function."
   local input_params=$@
@@ -81,9 +93,9 @@ main() {
   fi
 
   #================
-  # Parse the input parameters and extract info
+  main_step "Parse user input"
   #================
-  step "Parse user input"
+
   parse_param ${input_params[@]}
 
   mpi_param=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME} .*$::" | \
@@ -101,9 +113,9 @@ main() {
         ${ERROR_MPI_PARAMS}
 
   #================
-  # Detect the hosts
+  main_step "Detection of the hosts"
   #================
-  step "Detection of the hosts"
+
   if [[ "${mpi_param}" == *"-H"* ]]; then
     local hosts_location=$( echo ${mpi_param} | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
     HOSTS=( $(echo ${hosts_location} | sed "s/:[0-9]*,*/ /gI" ) )
@@ -117,9 +129,9 @@ main() {
   echo "HOSTS : ${HOSTS[@]}"
 
   #================
-  # Manage TMUX
+  main_step "Gestion of the tmux"
   #================
-  step "Gestion of the tmux"
+
   if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
     TMUX_CMD="tmux -S ${SPD_USER_TMUX_TMPDIR}"
   else
@@ -137,11 +149,13 @@ main() {
 
   # Check that tmux session already exists
   echo "Checking session ${SPD_TMUX_SESSION_NAME}"
+  decho ${TMUX_CMD} has-session -t ${SPD_TMUX_SESSION_NAME} 2>/dev/null
   # XXX Remove when script okay
 set +e
   ${TMUX_CMD} has-session -t ${SPD_TMUX_SESSION_NAME} 2>/dev/null
   local tmux_exist=$?
 set -e
+  decho "Returned error of checking: ${tmux_exist}"
   if [ ${tmux_exist} -eq 1 ]; then
     echo "Creation of the tmux session named '${SPD_TMUX_SESSION_NAME}'"
     decho ${TMUX_CMD} new -s ${SPD_TMUX_SESSION_NAME} \
@@ -166,9 +180,8 @@ set -e
   fi
 
   #================
-  # Create the mapping
+  main_step "Creation of the mapping"
   #================
-  step "Creation of the mapping"
 
   local nrow_per_window=0
   if [ ${PAGING} -eq ${TRUE} ]; then
@@ -221,7 +234,7 @@ set -e
   fi
 
   #================
-  step "Creation of the grid"
+  main_step "Creation of the grid"
   #================
 
   if [ ${SPD_UPDATE_PANES} -eq ${TRUE} ]; then
@@ -248,8 +261,12 @@ set -e
   fi
 
   #================
-  # Launch the execution
+  main_step "Populate the panes"
   #================
+
+  #----------------
+  step "Setup the master"
+
   # Export some var in the env of the master
   setup_pane_env ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} \
     ${MASTER_PANE} ${MASTER_RANK} ${MASTER_HOST}
@@ -262,16 +279,12 @@ set -e
     error "Unknown PANE_MODE ${PANE_MODE}" ${ERROR_PANE_MODE}
   fi
 
-  #================
-  step "Map the ranks onto the grid"
   #----------------
+  step "Map the ranks onto the grid"
 
   map_ranks ${MASTER_WINDOW} ${nwindows} ${nrow_per_window}
 
-  #================
-  # Launch the execution
-  #================
-
+  # Attach to the session
   if [ ${FORCE_ATTACH} -eq ${TRUE} ]; then
     if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
       ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
@@ -311,10 +324,17 @@ decho() {
 }
 
 # Format the print of a step given in parameter
+main_step() {
+  local desc="This function prints the name of the step passed in parameter."
+
+  echo -e "\n${GREEN}******** [${SCRIPT_NAME}] $1${NOFORMAT}"
+}
+
+# Format the print of a step given in parameter
 step() {
   local desc="This function prints the name of the step passed in parameter."
 
-  echo -e "\n${GREEN}******** $1${NOFORMAT}"
+  echo -e "${GREEN}--- $1${NOFORMAT}"
 }
 
 # Print error message and can exit if two parameters are given
