@@ -3,13 +3,17 @@
 # Used to avoid errors when executed.
 set -euo pipefail
 
-#-------------------
+#==========================
 # Rules of coding
+#
 # Capital varname are global var
 # Lower case varname is used for local var
 # All var must be ${}
 # For each function, a desc local var is used
 
+################################################################################
+#                           Constants and variables                            #
+################################################################################
 TRUE=1
 FALSE=0
 
@@ -34,6 +38,9 @@ ERROR_GRID_DIM=1
 # The given location integer is unknown
 ERROR_GRID_UNKNOWN_LOCATION=2
 
+# Name of this script
+SCRIPT_NAME=$(basename $0)
+
 # Pseudo code
 # Considering a 3D grid to display of size x,y,z
 #   - For 1:z
@@ -48,6 +55,9 @@ ERROR_GRID_UNKNOWN_LOCATION=2
 # Question: 
 #   - Can we update the existing grid?
 
+################################################################################
+#                                 Main function                                #
+################################################################################
 main(){
   local desc="This function manages the creation of a 3D grid of panes."
   local input_params=$@
@@ -64,9 +74,8 @@ main(){
   setup_output_format
 
   #================
-  # Parse the input parameters and extract info
+  main_step "Parse user input"
   #================
-  step "Parse user input"
   parse_param ${input_params[@]}
 
   bold "Parsed information:"
@@ -84,7 +93,7 @@ main(){
   select_tmux_location
   
   #================
-  # Main
+  main_step "Create the grid"
   #================
   # TODO pass master pane_id
   if [ ${#NELEMENT_PER_ROW[@]} -gt 0 ]; then
@@ -441,10 +450,17 @@ decho() {
 }
 
 # Format the print of a step given in parameter
+main_step() {
+  local desc="This function prints the name of the step passed in parameter."
+
+  echo -e "\n${GREEN}******** [${SCRIPT_NAME}] $1${NOFORMAT}"
+}
+
+# Format the print of a step given in parameter
 step() {
   local desc="This function prints the name of the step passed in parameter."
 
-  decho "\n${GREEN}******** $1${NOFORMAT}"
+  echo -e "${GREEN}--- $1${NOFORMAT}"
 }
 
 # Print error message and can exit if two parameters are given
