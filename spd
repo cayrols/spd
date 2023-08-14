@@ -466,6 +466,13 @@ chelp() {
   bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
   echo -e "\t\tAllows the user to not recreate the grid."
 
+  bold    "\t--attach <bool: DEFAULT ${FORCE_ATTACH-}>"
+  echo -e "\t\tForce to attach to the created tmux."
+
+  bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
+  echo -e "\t\tCreate a pane for each rank as" \
+              "a grid following either rank or PxQ."
+
   bold    "\t--dev"
   echo -e "\t\t[DEV purpose only] Enable DEV_MODE."
 
@@ -479,10 +486,13 @@ chelp() {
   bold    "\t-h, --help"
   echo -e "\t\tPrint this message."
 
+  bold    "\t-l, --local <bool: DEFAULT ${SPD_GRID_LOCAL-}>"
+  echo -e "\t\tCreate the grid from the current pane."
+
   bold    "\t-p <int: DEFAULT ${P-}>"
   echo -e "\t\tThe number of hosts."
 
-  bold    "\t--paging <int: DEFAULT ${NROW_PER_PAGE:-}"
+  bold    "\t--paging <int: DEFAULT ${NROW_PER_PAGE:-}>"
   echo -e "\t\tEnable paging the ranks displayed <int> rows per window."
 
   bold    "\t--port <int: DEFAULT ${PORT-}>"
@@ -501,9 +511,8 @@ chelp() {
   bold    "EXAMPLES"
   echo -e "\t\tThere is a test folder with a program example.c."
   echo -e "\t\tGo to test and compile it using make."
- #echo -e "\t\tExport PGDB_BIN=<split_output.sh>"
   echo -e "\t\tThen, use the program as follow :"
-  echo -e "\t\t\t../spd -p 1 -q 2 --exec example --run mpirun -n 2 example"
+  echo -e "\t\t\t../spd -p 1 -q 2 --exec ./example --run mpirun -n 2 ./example"
   echo -e "\t\tFinally, attach to the tmux session."
   echo -e "\t\tTIPS : during tmux session, the bind 'C-b z' focuses on the current pane."
   echo -e "\t\tTIPS : during tmux session, the command 'kill-all -a -t 0' closes"
@@ -524,10 +533,14 @@ parse_param() {
     while [ $# -gt 0 ]; do
       # Alphabetic order
       case $1 in
-       #--attach)
-       #  ATTACH=$TRUE
-       #  shift
-       #  ;;
+        --attach)
+          shift
+          FORCE_ATTACH=${TRUE}
+          if [ $1 -eq 0 ]; then
+            FORCE_ATTACH=${FALSE}
+          fi
+          shift
+          ;;
         --create_grid)
           shift
           SPD_UPDATE_PANES=${TRUE}
@@ -562,6 +575,10 @@ parse_param() {
         -l | --local)
           shift
           SPD_GRID_LOCAL=${TRUE}
+          if [ $1 -eq 0 ]; then
+            SPD_GRID_LOCAL=${FALSE}
+          fi
+          shift
           ;;
         -p)
           shift
@@ -591,7 +608,7 @@ parse_param() {
           shift
           ;;
        #--rearrangeGrid) # TODO but not implemented yet
-       #  REARRANGEGRID=$TRUE
+       #  REARRANGEGRID=${TRUE}
        #  shift
        #  ;;
         --run)
@@ -1071,7 +1088,6 @@ start_master() {
   send_cmd_to_pane ${SPD_TMUX_SESSION_NAME} ${MASTER_WINDOW} ${MASTER_PANE} ${cmd}
 }
 
-#if [ ${ATTACH} -eq ${FALSE} ]; then
 start_gdbserver() {
   local desc="This function starts the gdbserver on the master pane."
   local cmd=""
