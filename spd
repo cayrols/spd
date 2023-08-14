@@ -132,10 +132,10 @@ main() {
   main_step "Gestion of the tmux"
   #================
 
+  TMUX_EXEC="${TMUX_BIN:+${TMUX_BIN}/}tmux"
+  TMUX_CMD=${TMUX_EXEC}
   if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
-    TMUX_CMD="tmux -S ${SPD_USER_TMUX_TMPDIR}"
-  else
-    TMUX_CMD="tmux"
+    TMUX_CMD+=" -S ${SPD_USER_TMUX_TMPDIR}"
   fi
 
   if [ ${SPD_GRID_LOCAL} -eq ${TRUE} ]; then
@@ -255,6 +255,8 @@ set -e
     # TODO here it would not work if no socket given
     decho ${GRID_MANAGER_ROOT}/grid_creation.sh \
       ${grid_params} ${sparse_grid_params}
+    # Note: pass the TMUX_EXEC to subscript.
+    env EXPORTED_TMUX_EXEC=${TMUX_EXEC} \
     ${GRID_MANAGER_ROOT}/grid_creation.sh \
       ${grid_params} \
       ${sparse_grid_params} # This parameter HAS TO be the last

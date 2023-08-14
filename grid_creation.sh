@@ -18,7 +18,10 @@ TRUE=1
 FALSE=0
 
 # Default tmux command that may be updated in the main function
-TMUX_CMD="tmux"
+# NOTE: a calling script may pass a specific TMUX_EXEC,
+# especially useful when both tmux (outer and inner) have
+# to be the same.
+TMUX_EXEC=${EXPORTED_TMUX_EXEC:-"${TMUX_BIN:+${TMUX_BIN}/}tmux"}
 
 # Pane orientation choices
 VERTICAL=v
@@ -84,6 +87,7 @@ main(){
     echo "Sparse: ${NELEMENT_PER_ROW[@]}"
   fi
 
+  TMUX_CMD=${TMUX_EXEC}
   # Update the TMUX command that is used by inner functions
   if [ ${GRID_MANAGER_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
     TMUX_CMD+=" -S ${GRID_MANAGER_USER_TMUX_TMPDIR}"
