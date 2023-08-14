@@ -38,6 +38,9 @@ GRID_MANAGER_USER_DIR=$HOME/.spd
 #===========
 # TMUX related
 
+# Path where the tmux binary is located
+TMUX_BIN=
+
 # Path where the tmux session will be created
 GRID_MANAGER_USER_TMUX_TMPDIR=${GRID_MANAGER_USER_DIR}/tmux_spd_socket
 
