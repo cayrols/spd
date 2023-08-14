@@ -196,7 +196,7 @@ set -e
   local sparse_grid_params=""
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
     decho "Creation of sparse grid"
-    create_sparse_grid ${P} ${Q} ${nrow_per_window} ${RANK_LIST[@]}
+    define_sparse_grid ${P} ${Q} ${nrow_per_window} ${RANK_LIST[@]}
 
     # Count the total number of non-empty rows
     for i in $( seq 0 $((P - 1)) ); do
@@ -211,12 +211,12 @@ set -e
     sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
     decho "sparse_grid_params: ${sparse_grid_params}"
     # TODO if rearrange is used, we should change PANE_ID
-    # OR create another create_sparse_grid
-    # OR pass an extra parameter to create_sparse_grid to rearrange at the
+    # OR create another define_sparse_grid
+    # OR pass an extra parameter to define_sparse_grid to rearrange at the
     # same time.
   else
     decho "Creation of dense grid"
-    create_dense_grid ${P} ${Q} ${nrow_per_window}
+    define_dense_grid ${P} ${Q} ${nrow_per_window}
 
     nnz_row=${P}
   fi
@@ -805,11 +805,11 @@ is_active_rank() {
   done
 }
 
-# This routine creates a regular grid in a CSR format.
+# This routine defines a regular grid in a CSR format.
 # PARAMS:
 #   1/ number of rows
 #   2/ number of columns
-create_dense_grid() {
+define_dense_grid() {
   local desc="This function creates a dense grid where "
     desc+="each pane is associated with a rank."
   local nrow=$1
@@ -864,12 +864,12 @@ create_dense_grid() {
   PANE_RANK=( ${lpane_rank[@]} )
 }
 
-# This routine creates a regular grid in a CSR format.
+# This routine defines a regular grid in a CSR format.
 # PARAMS:
 #   1/ number of rows
 #   2/ number of columns
 #   3/ List of ranks to put in the grid
-create_sparse_grid() {
+define_sparse_grid() {
   local desc="This function returns a CSR representation of a sparse grid "
     desc+="where only the given ranks are inserted."
   local nrow=$1
