@@ -2,7 +2,7 @@
 
 Questions:
 * Can we have multiple instances of spd running at the same time?
-* does it imply the port should be changed too in the case of `gdv`?
+* does it imply the port should be changed too in the case of `gdb`?
 
 Todo list:
 * Create a local_fifo repo for each execution, like in ssh,

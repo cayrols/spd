@@ -29,6 +29,12 @@ ERROR_SEND_CMD=3
 ERROR_PANE_MODE=4
 # - The requested mode for the master is incorrect
 ERROR_PANE_KILL=5
+# - The creation of the user directory
+ERROR_USER_DIR=10
+# - The creation of the pipe directory
+ERROR_PIPE_DIR=11
+# - The creation of the grid
+ERROR_GRID_CREATION=12
 
 #Pane orientation choices
 VERTICAL=v
@@ -53,7 +59,7 @@ SCRIPT_NAME=$(basename $0)
 main() {
   local desc="This function is the main function."
   local input_params=$@
-  local mpi_param=""
+  local mpi_cmd=""
   local exec_param=""
 
   #================
@@ -66,18 +72,23 @@ main() {
 
   source_config_and_rc_files
 
-  # Check the main internal folder exists
-  if [ ! -e ${SPD_USER_DIR} ]; then
-    echo "Creation of the user root for temporarly ${SPD_USER_DIR}"
-    mkdir ${SPD_USER_DIR}
-  fi
-  # Create the folder that will contains the pipes
-  if [ ! -e ${SPD_PIPE_FOLDER} ]; then
-    echo "Creation of ${SPD_PIPE_FOLDER}"
-    mkdir ${SPD_PIPE_FOLDER}
-  fi
   setup_output_format
 
+  # Check whether the main internal folder exists
+  if [ ! -e ${SPD_USER_DIR} ]; then
+    decho "Creation of ${SPD_USER_DIR} the user directory for temporary files."
+    mkdir ${SPD_USER_DIR} \
+      || error "Impossible to create ${SPD_USER_DIR}" ${ERROR_USER_DIR}
+  fi
+
+  # Create the folder that will contains the pipes
+  if [ ! -e ${SPD_PIPE_DIR} ]; then
+    decho "Creation of ${SPD_PIPE_DIR}"
+    mkdir ${SPD_PIPE_DIR} \
+      || error "Impossible to create ${SPD_PIPE_DIR}" ${ERROR_PIPE_DIR}
+  fi
+
+  # Define the GDB_EXEC
   if [ ! -z "${GDB_BIN}" ]; then
     GDB_EXEC=${GDB_BIN}/${GDB_EXEC_NAME}
   else
@@ -85,6 +96,7 @@ main() {
     GDB_EXEC=${GDB_EXEC_NAME}
   fi
 
+  # Define the GDBSERVER_EXEC
   if [ ! -z "${GDBSERVER_BIN}" ]; then
     GDBSERVER_EXEC=${GDBSERVER_BIN}/${GDBSERVER_EXEC_NAME}
   else
@@ -98,17 +110,20 @@ main() {
 
   parse_param ${input_params[@]}
 
-  mpi_param=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME} .*$::" | \
+  # Extract MPI parameters
+  mpi_cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME} .*$::" | \
     sed "s%${EXEC_NAME}%%" )
+  # Extract user executable parameters
   exec_param=$(echo ${CMD_LINE} | sed "s:^.*${EXEC_NAME}::" )
 
   bold "Parsed information:"
-  echo "Command line   : ${CMD_LINE}"
-  echo "Execution      : grid ${P}x${Q}"
-  echo "MPI parameters : ${mpi_param}"
-  echo "Exec parameters: ${exec_param}"
+  echo "Command line     : ${CMD_LINE}"
+  echo "Grid             : ${P}x${Q}"
+  echo "MPI command line : ${mpi_cmd}"
+  echo "Exec parameters  : ${exec_param}"
 
-  ${mpi_param} hostname >/dev/null 2>&1 \
+  # Check whether MPI commandline can be used.
+  ${mpi_cmd} hostname >/dev/null 2>&1 \
     || error "The MPI parameters given in input cannot be used." \
         ${ERROR_MPI_PARAMS}
 
@@ -116,28 +131,38 @@ main() {
   main_step "Detection of the hosts"
   #================
 
-  if [[ "${mpi_param}" == *"-H"* ]]; then
-    local hosts_location=$( echo ${mpi_param} | sed "s/^.*-H[ ]*//" | sed "s/-.*$//")
+  # Look for the hostnames used in the grid generation (todo?)
+  if [[ "${mpi_cmd}" == *"-H"* ]]; then
+    local hosts_location=$( \
+      echo ${mpi_cmd} | sed "s/^.*-H[ ]*//" | sed "s/-.*$//" )
     HOSTS=( $(echo ${hosts_location} | sed "s/:[0-9]*,*/ /gI" ) )
   else
-    warning "No -H parameters given to mpirun "
+    warning "No -H parameters given to mpi command line."
     echo  "=> Trying to detect the hostnames that will be sorted."
-    local hosts_raw_info=$( ${mpi_param} hostname )
-    decho "RAW hosts: ${hosts_raw_info}"
+
+    local hosts_raw_info=$( ${mpi_cmd} hostname )
+    decho "RAW hosts found: ${hosts_raw_info}"
     HOSTS=( $(echo ${hosts_raw_info} | tr ' ' '\n' | sort | uniq ) )
   fi
-  echo "HOSTS : ${HOSTS[@]}"
+  decho "HOSTS: ${HOSTS[@]}"
 
   #================
   main_step "Gestion of the tmux"
   #================
 
+  # Define tmux command line, appending a socket if requested.
   TMUX_EXEC="${TMUX_BIN:+${TMUX_BIN}/}tmux"
   TMUX_CMD=${TMUX_EXEC}
   if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
     TMUX_CMD+=" -S ${SPD_USER_TMUX_TMPDIR}"
   fi
+  # TODO check the tmux command is correct.
+  decho "TMUX_CMD: ${TMUX_CMD}"
 
+  # Extract tmux info using TMUX_CMD:
+  #   - Current session name
+  #   - Current window index
+  #   - Current pane index
   if [ ${SPD_GRID_LOCAL} -eq ${TRUE} ]; then
     get_tmux_info
 
@@ -156,6 +181,9 @@ set +e
   local tmux_exist=$?
 set -e
   decho "Returned error of checking: ${tmux_exist}"
+
+  # If tmux session does not exist, we create it,
+  # else, select/attach to it.
   if [ ${tmux_exist} -eq 1 ]; then
     echo "Creation of the tmux session named '${SPD_TMUX_SESSION_NAME}'"
     decho ${TMUX_CMD} new -s ${SPD_TMUX_SESSION_NAME} \
@@ -167,8 +195,9 @@ set -e
 
     #Ensure this session is the current one by attaching to it if more than one
     local tmux_nsession=$( ${TMUX_CMD} ls | wc -l )
-    echo "#sessions: ${tmux_nsession}"
+    echo "#session named ${SPD_TMUX_SESSION_NAME}: ${tmux_nsession}"
     # TODO Make it a choice: attach/switch or not.
+   #XXX
    #if [ ${tmux_nsession} -gt 1 ]; then
    #  if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
    #    ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
@@ -183,6 +212,7 @@ set -e
   main_step "Creation of the mapping"
   #================
 
+  # Define the number of rows per window
   local nrow_per_window=0
   if [ ${PAGING} -eq ${TRUE} ]; then
     nrow_per_window=${NROW_PER_PAGE}
@@ -192,10 +222,12 @@ set -e
 
   # We generate the mapping beforehand as we need to know
   # in the sparse case the list of active rows.
+  # We therefore use the same data structure in the dense case
+  # as in the sparse one.
   local nnz_row=0
   local sparse_grid_params=""
   if [ ${#RANK_LIST[@]} -gt 0 ]; then
-    decho "Creation of sparse grid"
+    decho "Definition of sparse grid"
     define_sparse_grid ${P} ${Q} ${nrow_per_window} ${RANK_LIST[@]}
 
     # Count the total number of non-empty rows
@@ -215,7 +247,7 @@ set -e
     # OR pass an extra parameter to define_sparse_grid to rearrange at the
     # same time.
   else
-    decho "Creation of dense grid"
+    decho "Definition of dense grid"
     define_dense_grid ${P} ${Q} ${nrow_per_window}
 
     nnz_row=${P}
@@ -259,7 +291,8 @@ set -e
     env EXPORTED_TMUX_EXEC=${TMUX_EXEC} \
     ${GRID_MANAGER_ROOT}/grid_creation.sh \
       ${grid_params} \
-      ${sparse_grid_params} # This parameter HAS TO be the last
+      ${sparse_grid_params} \ # This parameter HAS TO be the last
+      || error "Unable to create the grid." ${ERROR_GRID_CREATION}
   fi
 
   #================
@@ -329,7 +362,7 @@ decho() {
 main_step() {
   local desc="This function prints the name of the step passed in parameter."
 
-  echo -e "\n${GREEN}******** [${SCRIPT_NAME}] $1${NOFORMAT}"
+  echo -e "\n${GREEN}[${SCRIPT_NAME}] ******** $1${NOFORMAT}"
 }
 
 # Format the print of a step given in parameter
@@ -663,7 +696,7 @@ setup_pane_env() {
   local cmd=""
 
   cmd+="export "
-  cmd+="SPD_ROOT=${SPD_ROOT} SPD_PIPE_FOLDER=${SPD_PIPE_FOLDER} "
+  cmd+="SPD_ROOT=${SPD_ROOT} SPD_PIPE_DIR=${SPD_PIPE_DIR} "
   cmd+="SPD_PANE_RANK=${pane_rank} SPD_PANE_HOST=${pane_host} "
   cmd+="SPD_PANE_PORT=$(( PORT + pane_rank )) "
   cmd+="SPD_GDB_EXEC=${GDB_EXEC} SPD_GDB_PARAMS=\"${GDB_PARAMS}\" "
@@ -681,7 +714,7 @@ setup_pane_using_pipe() {
   local window_id=$2
   local pane_id=$3
   local proc_rank_of_pane=$4
-  local pane_pipe=${SPD_PIPE_FOLDER}/fifo_${proc_rank_of_pane}
+  local pane_pipe=${SPD_PIPE_DIR}/fifo_${proc_rank_of_pane}
   local cmd=""
   local default_cmd=""
 
@@ -1031,7 +1064,7 @@ start_master() {
   else
     master_cmd+=" --split"
   fi
-  master_cmd+=" --pipe_dir ${SPD_PIPE_FOLDER}"
+  master_cmd+=" --pipe_dir ${SPD_PIPE_DIR}"
   master_cmd+=" --run"
   cmd=$(echo ${CMD_LINE} | sed "s:${EXEC_NAME}:${master_cmd} &:" )
 

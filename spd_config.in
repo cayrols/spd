@@ -105,7 +105,7 @@ PORT=60000
 SPD_WAITING_TIME=2
 
 # Location where the pipes will be created and read
-SPD_PIPE_FOLDER=${SPD_USER_DIR}/local_fifos
+SPD_PIPE_DIR=${SPD_USER_DIR}/local_fifos
 
 # USER may define the command to listen on the pipe
 # NOTE: the pipe is named ${pane_pipe}
@@ -121,4 +121,4 @@ FORCE_ATTACH=${FALSE}
 PYTHON_BIN=python3
 
 # XXX Features not checked
-REARRANGE_GRID=$FALSE
+#REARRANGE_GRID=${FALSE}

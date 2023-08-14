@@ -457,7 +457,7 @@ decho() {
 main_step() {
   local desc="This function prints the name of the step passed in parameter."
 
-  echo -e "\n${GREEN}******** [${SCRIPT_NAME}] $1${NOFORMAT}"
+  echo -e "\n${GREEN}[${SCRIPT_NAME}] ******** $1${NOFORMAT}"
 }
 
 # Format the print of a step given in parameter
