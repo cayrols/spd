@@ -39,7 +39,7 @@ void buffer_overflow(MPI_Comm comm) {
     printf( "Example %s:\n"
         "\tAll ranks except one rank allocates memory and fill in\n",
         __FUNCTION__ );
-    printf( "Failing_rank: %d\n", failing_rank );
+    printf( "Failing rank id (random): %d\n", failing_rank );
   }
 
   // Reset the bufsize so that the failing rank does not allocate memory
@@ -78,7 +78,7 @@ void freed_buffer(MPI_Comm comm) {
     printf( "Example %s:\n"
         "\tA rank frees its memory before accessing it\n",
         __FUNCTION__ );
-    printf( "Failing_rank: %d\n", failing_rank );
+    printf( "Failing rank id (random): %d\n", failing_rank );
   }
 
   buf = (double*) malloc( bufsize );
@@ -117,7 +117,7 @@ void double_free(MPI_Comm comm) {
     printf( "Example %s:\n"
         "\tA rank frees its memory twice\n",
         __FUNCTION__ );
-    printf( "Failing_rank: %d\n", failing_rank );
+    printf( "Failing rank id (random): %d\n", failing_rank );
   }
 
   buf = (double*) malloc( bufsize );
@@ -131,7 +131,8 @@ void double_free(MPI_Comm comm) {
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
-#define USAGE "%s: <example_id: %d>\n" \
+#define USAGE "%s <example_id>\n" \
+  "List of examples:\n" \
   "\texample_buffer_overflow: %d\n" \
   "\texample_freed_memory: %d\n" \
   "\texample_double_free: %d\n"
@@ -140,25 +141,25 @@ int main( int argc, char *argv[])
 {
   int rank            = 0;
   int size            = 1;
-  int default_example = example_freed_memory;
   int example         = 0;
   MPI_Comm comm;
 
-  if (argc > 1) {
-    if (!strcmp( argv[1], "-h" )) {
-      printf( USAGE, argv[0], default_example,
-          example_buffer_overflow, example_freed_memory, example_double_free );
-      return PARAM_ERROR;
-    }
-    int given_param = atoi(argv[1]);
-    if (given_param > 0  && given_param <= N_EXAMPLE)
-      example = given_param;
-    else {
-      fprintf( stderr, "Error, value %d incorrect.\n", given_param );
-      return PARAM_ERROR;
-    }
+  // Manage parameters
+  if (argc == 1 || !strcmp( argv[1], "-h" )) {
+    printf( USAGE, argv[0],
+        example_buffer_overflow, example_freed_memory, example_double_free );
+    return 0;
   }
 
+  int given_param = atoi(argv[1]);
+  if (given_param > 0  && given_param <= N_EXAMPLE)
+    example = given_param;
+  else {
+    fprintf( stderr, "Error, value %d incorrect.\n", given_param );
+    return PARAM_ERROR;
+  }
+
+  // Init MPI
   MPI_Init( &argc, &argv );
   MPI_Comm_dup( MPI_COMM_WORLD, &comm );
 
@@ -167,6 +168,7 @@ int main( int argc, char *argv[])
 
   printf( "MPI info %d/%d\n", rank, size );
 
+  // Launch one example
   switch (example) {
     case example_buffer_overflow:
       buffer_overflow( comm );
@@ -179,7 +181,9 @@ int main( int argc, char *argv[])
       break;
   }
   
+  // Cleaning
   MPI_Comm_free( &comm );
   MPI_Finalize();
+
   return 0;
 }
