@@ -236,7 +236,7 @@ read_env() {
   PORT=${SPD_PANE_PORT}
   HOST=${SPD_PANE_HOST}
 
-  LOCAL_FIFOS=${SPD_PIPE_FOLDER}
+  LOCAL_FIFOS=${SPD_PIPE_DIR}
 }
 
 main "$@"
