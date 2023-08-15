@@ -553,26 +553,16 @@ chelp() {
   echo -e "\tNone"
 
   bold    "OPTIONS"
-  bold    "\t-x <int: DEFAULT ${DIM_X-}>"
-  echo -e "\t\tThe number of hosts per 2D grid."
-
-  bold    "\t-y <int: DEFAULT ${DIM_Y-}>"
-  echo -e "\t\tThe number of MPI processes per host."
-
-  bold    "\t-z <int: DEFAULT ${DIM_Z-}>"
-  echo -e "\t\tThe number of 2D grid."
-
-  bold    "\t--tmux_session <name: DEFAULT ${GRID_MANAGER_TMUX_SESSION_NAME-}>"
-  echo -e "\t\tThe name of the tmux session to use."
-
-  bold    "\t--tmux_socket <path/name: DEFAULT ${GRID_MANAGER_USER_TMUX_TMPDIR-}>"
-  echo -e "\t\tThe name of the tmux session to use."
-
-  bold    "\t--tmux_initial_window_id <int: DEFAULT ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID}>"
-  echo -e "\t\tThe initial window ID where to create the grid."
-
   bold    "\t--create_with_master <bool: DEFAULT ${GRID_MANAGER_WITH_MASTER-}>"
   echo -e "\t\tCreate space for a master pane."
+
+  bold    "\t-l, --location [ cw | nw | w | s ]"
+  echo -e "\t\tChange the location where the grid is created."
+  echo -e "\t\tOptions:"
+  echo -e "\t\t\t\tcw | current_window"
+  echo -e "\t\t\t\tnw | next_window"
+  echo -e "\t\t\t\tw  | window <int> Index of the window where to start."
+  echo -e "\t\t\t\ts  | session <session_name> Name of the tmux session to use."
 
   bold    "\t--nrow <int: DEFAULT ${GRID_MANAGER_NROW-}>"
   echo -e "\t\tNumber of rows to display in total."
@@ -581,13 +571,23 @@ chelp() {
   echo -e "\t\tList of number of panes per row."
   echo -e "\t\tNOTES: Must be the last one as a list is expected."
 
-  bold    "\t-l, --location [ cw | nw | w | s ]"
-  echo -e "\t\tChange the location where the grid is created."
-  echo -e "\t\tOptions:"
-  echo -e "\t\t\t\tcw | current_window"
-  echo -e "\t\t\t\tnw | next_window"
-  echo -e "\t\t\t\tw | window <int> Index of the window where to start."
-  echo -e "\t\t\t\ts | session <session_name> Name of the tmux session to use."
+  bold    "\t--tmux_initial_window_id <int: DEFAULT ${GRID_MANAGER_TMUX_INITIAL_WINDOW_ID}>"
+  echo -e "\t\tThe initial window ID where to create the grid."
+
+  bold    "\t--tmux_session <name: DEFAULT ${GRID_MANAGER_TMUX_SESSION_NAME-}>"
+  echo -e "\t\tThe name of the tmux session to use."
+
+  bold    "\t--tmux_socket <path/name: DEFAULT ${GRID_MANAGER_USER_TMUX_TMPDIR-}>"
+  echo -e "\t\tThe name of the tmux session to use."
+
+  bold    "\t-x <int: DEFAULT ${DIM_X-}>"
+  echo -e "\t\tThe number of hosts per 2D grid."
+
+  bold    "\t-y <int: DEFAULT ${DIM_Y-}>"
+  echo -e "\t\tThe number of MPI processes per host."
+
+  bold    "\t-z <int: DEFAULT ${DIM_Z-}>"
+  echo -e "\t\tThe number of 2D grid."
 
   bold    "REMARKS"
   echo -e "\t\tIf the flag --rows_size is used, it MUST be the last one" \
