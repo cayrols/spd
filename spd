@@ -247,7 +247,7 @@ set -e
     # OR pass an extra parameter to define_sparse_grid to rearrange at the
     # same time.
   else
-    decho "Definition of dense grid"
+    decho "Definition of dense grid (CSR format)"
     define_dense_grid ${P} ${Q} ${nrow_per_window}
 
     nnz_row=${P}
@@ -287,12 +287,15 @@ set -e
     # TODO here it would not work if no socket given
     decho ${GRID_MANAGER_ROOT}/grid_creation.sh \
       ${grid_params} ${sparse_grid_params}
+    # /!\ The parameter ${sparse_grid_params} HAS TO be the last
     # Note: pass the TMUX_EXEC to subscript.
     env EXPORTED_TMUX_EXEC=${TMUX_EXEC} \
     ${GRID_MANAGER_ROOT}/grid_creation.sh \
       ${grid_params} \
-      ${sparse_grid_params} \ # This parameter HAS TO be the last
+      ${sparse_grid_params} \
       || error "Unable to create the grid." ${ERROR_GRID_CREATION}
+  else
+    echo "Skipped."
   fi
 
   #================
@@ -696,10 +699,14 @@ send_cmd_to_pane() {
   shift 3
   local cmd=$@
 
-  tmux_cmd_sent "${TMUX_CMD} send-keys -t ${tmux_session}:${window_id}.${pane_id} \"\n${cmd}\n\" Enter"
+  tmux_cmd_sent \
+    "${TMUX_CMD} send-keys -t ${tmux_session}:${window_id}.${pane_id} \"\n${cmd}\n\" Enter"
   if [ ${DEV_MODE} -eq ${FALSE} ]; then
-      ${TMUX_CMD} send-keys -t ${tmux_session}:${window_id}.${pane_id} "${cmd}" Enter \
-        || error "Cannot send cmd ${cmd} to pane ${tmux_session}:${window_id}.${pane_id}" ${ERROR_SEND_CMD}
+      ${TMUX_CMD} send-keys \
+        -t ${tmux_session}:${window_id}.${pane_id} \
+        "${cmd}" Enter \
+        || error "Cannot send cmd ${cmd} to pane ${tmux_session}:${window_id}.${pane_id}" \
+          ${ERROR_SEND_CMD}
   fi
 }
 
@@ -881,7 +888,7 @@ define_dense_grid() {
 
   # We offset the paneId when a master exists
   if [ ${with_pane_master} -eq 1 ]; then
-    pane_id=1
+    pane_id=$(( 1 + ${MASTER_PANE} ))
   fi
 
   # For each row
