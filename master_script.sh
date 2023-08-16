@@ -11,8 +11,8 @@ SPLIT_OUTPUT=$FALSE
 
 DEV_MODE=$TRUE
 DEV_MODE=$FALSE
-VERBOSE=${FALSE}
 VERBOSE=${TRUE}
+VERBOSE=${FALSE}
 
 main() {
   local input_params=$@
