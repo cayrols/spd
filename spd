@@ -246,18 +246,21 @@ set -e
       fi
     done
 
-    # Compute the number of ranks in each row
-    sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
-    decho "sparse_grid_params: ${sparse_grid_params}"
-    # TODO if rearrange is used, we should change PANE_ID
-    # OR create another define_sparse_grid
-    # OR pass an extra parameter to define_sparse_grid to rearrange at the
-    # same time.
+    # Overwrite the behavior of the sparse case when the grid does
+    # not exist to create a dense grid with sparse ranks.
+    if [ ${SPD_UPDATE_PANES} -eq ${TRUE} -a ${SPD_UNPACK_RANKS} -eq ${TRUE} ]; then
+      warning "Overwrite nnz_row from ${nnz_row} with ${P}"
+      nnz_row=${P}
+    else
+      # Compute the number of ranks in each row
+      sparse_grid_params="--rows_size ${NNZ_ROW_PTR[@]}"
+      decho "sparse_grid_params: ${sparse_grid_params}"
+    fi
   else
     decho "Definition of dense grid (CSR format)"
     define_dense_grid ${P} ${Q} ${nrow_per_window}
 
-    nnz_row=${P}
+    nnz_row=${P} # XXX Use it in grid creation when sparse but want to create a dense grid.
   fi
 
   # Count the number of pages needed:
@@ -282,7 +285,8 @@ set -e
       --tmux_session ${SPD_TMUX_SESSION_NAME} \
       --tmux_initial_window_id ${MASTER_WINDOW} \
       --tmux_socket ${SPD_USER_TMUX_TMPDIR} \
-      --create_with_master ${TRUE} --nrow ${nnz_row}"
+      --create_with_master ${TRUE} \
+      --nrow ${nnz_row}"
 
     # Force the execution from the window the script is called.
     # TODO Should we pass the exact info here or
@@ -525,6 +529,9 @@ chelp() {
   bold    "\t--ranks <int,...>"
   echo -e "\t\tList of ranks to debug, separated by a comma and NO SPACE."
 
+  bold    "\t--unpack_ranks <bool: DEFAULT ${SPD_UNPACK_RANKS}>"
+  echo -e "\t\tUnpack ranks such that the grid is of size P*Q."
+
   bold    "\t--split"
   echo -e "\t\tRequest each rank to redirect their output to dedicated pane."
 
@@ -609,6 +616,7 @@ parse_param() {
         --paging)
           shift
           PAGING=${TRUE}
+          # TODO check correctness (not starting with -)
           NROW_PER_PAGE=$1
           shift
           ;;
@@ -627,11 +635,17 @@ parse_param() {
           RANK_LIST=$( echo ${1} | tr -s ',' ' ' )
           decho "List of provided ranks: ${RANK_LIST[@]}"
           shift
+          # Force to use pack ranks unless the value is overwritten
+          SPD_UNPACK_RANKS=${FALSE}
           ;;
-       #--rearrangeGrid) # TODO but not implemented yet
-       #  REARRANGEGRID=${TRUE}
-       #  shift
-       #  ;;
+        --unpack_ranks)
+          shift
+          SPD_UNPACK_RANKS=${TRUE}
+          if [ $1 -eq 0 ]; then
+            SPD_UNPACK_RANKS=${FALSE}
+          fi
+          shift
+          ;;
         --run)
           shift
           CMD_LINE=$*
@@ -975,7 +989,7 @@ define_sparse_grid() {
 
   # We offset the paneId when a master exists
   if [ ${with_pane_master} -eq 1 ]; then
-    pane_id=1
+    pane_id=$(( 1 + ${MASTER_PANE} ))
   fi
 
   # For each row of a dense grid
@@ -995,6 +1009,8 @@ define_sparse_grid() {
         
         nval=$((nval + 1))
         lrow_is_empty=${FALSE}
+        pane_id=$((pane_id + 1))
+      elif [ ${SPD_UNPACK_RANKS} -eq ${TRUE} ]; then
         pane_id=$((pane_id + 1))
       fi
       # Clean what was created by the call to is_active_rank

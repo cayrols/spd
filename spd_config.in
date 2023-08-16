@@ -120,5 +120,5 @@ SPD_PIPE_DIR=${SPD_USER_DIR}/local_fifos
 # Python binary to use
 PYTHON_BIN=python3
 
-# XXX Features not checked
-#REARRANGE_GRID=${FALSE}
+# Unpack the ranks such that they are mapped onto the grid P*Q
+SPD_UNPACK_RANKS=${TRUE}
