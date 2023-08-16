@@ -31,6 +31,8 @@ ERROR_PANE_MODE=4
 ERROR_PANE_KILL=5
 # - The requested number of panes is smaller than P*Q
 ERROR_PANE_NUMBER=6
+# - The tmux command is incorrect
+ERROR_TMUX_CMD=7
 # - The creation of the user directory
 ERROR_USER_DIR=10
 # - The creation of the pipe directory
