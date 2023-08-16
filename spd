@@ -156,8 +156,11 @@ main() {
   if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
     TMUX_CMD+=" -S ${SPD_USER_TMUX_TMPDIR}"
   fi
-  # TODO check the tmux command is correct.
+
+  # check the tmux command is correct.
   decho "TMUX_CMD: ${TMUX_CMD}"
+  ${TMUX_CMD} ls 2>&1 \
+    || error "Cannot use tmux command ${TMUX_CMD}" ${ERROR_TMUX_CMD}
 
   # Extract tmux info using TMUX_CMD:
   #   - Current session name
