@@ -29,6 +29,8 @@ ERROR_SEND_CMD=3
 ERROR_PANE_MODE=4
 # - The requested mode for the master is incorrect
 ERROR_PANE_KILL=5
+# - The requested number of panes is smaller than P*Q
+ERROR_PANE_NUMBER=6
 # - The creation of the user directory
 ERROR_USER_DIR=10
 # - The creation of the pipe directory
@@ -298,7 +300,18 @@ set -e
       ${sparse_grid_params} \
       || error "Unable to create the grid." ${ERROR_GRID_CREATION}
   else
-    echo "Skipped."
+    # Check whether there is enough panes to map the process grid
+    get_number_panes_avail
+    local total_available_panes=${_RET_VAL}
+    unset _RET_VAL
+
+    # Note: +1 to take into account the master pane
+    if [ $(( ${P}*${Q} + 1 )) -gt ${total_available_panes} ]; then
+      error "Not enough panes (${total_available_panes}) to map ${P}*${Q} + master_pane" \
+      ${ERROR_PANE_NUMBER}
+    else
+      echo "Skipped."
+    fi
   fi
 
   #================
@@ -796,13 +809,14 @@ setup_pane_with_gdb() {
   send_cmd_to_pane ${tmux_session} ${window_id} ${pane_id} ${cmd}
 }
 
+# XXX unused.
 compute_pane_size() {
   local desc="This function computes the size of a pane within a row."
   local ntotal_col=$1
   local col_already_created=$2
 
   # Returned value
-  _RETVAL=$((100 - 100 / (ntotal_col - col_already_created + 1) ))
+  _RET_VAL=$((100 - 100 / (ntotal_col - col_already_created + 1) ))
 }
 
 map_ranks_to_window(){
@@ -1043,7 +1057,28 @@ compute_list_rows_to_display() {
   done
 
   # Returned value
-  _RETVAL=( ${lrow_to_display[@]} )
+  _RET_VAL=( ${lrow_to_display[@]} )
+}
+
+get_number_panes_avail(){
+  local desc="This function returns the number of panes existing starting"
+    desc+=" with the MASTER_WINDOW."
+  local total_available_panes=0
+
+  local total_window=$( \
+    ${TMUX_CMD} list-windows -t ${SPD_TMUX_SESSION_NAME} | wc -l )
+
+  # Get the number of panes per window
+  for window_id in $( seq ${MASTER_WINDOW} $(( total_window - 1 )) ); do
+    total_available_panes=$(( total_available_panes \
+      + $( ${TMUX_CMD} list-panes -t ${SPD_TMUX_SESSION_NAME}:${window_id} \
+          | wc -l ) ))
+  done
+  decho "total window: ${total_window}"
+  decho "total available panes starting window ${MASTER_WINDOW}:" \
+    " ${total_available_panes}"
+
+  _RET_VAL=${total_available_panes}
 }
 
 map_ranks(){
@@ -1058,7 +1093,8 @@ map_ranks(){
   # Map ranks to panes
   for window_id in $( seq ${initial_window} $((nwindows + initial_window - 1)) ); do 
     compute_list_rows_to_display ${nrow_displayed} ${nrow_per_window} ${ROW_PTR[@]}
-    lrow_to_display=( ${_RETVAL[@]} )
+    lrow_to_display=( ${_RET_VAL[@]} )
+    unset _RET_VAL
     decho "[W:${window_id}] ${lrow_to_display[@]} rows to display in window ${window_id}"
 
     map_ranks_to_window ${SPD_TMUX_SESSION_NAME} ${window_id} ${lrow_to_display[@]}
