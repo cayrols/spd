@@ -1,6 +1,8 @@
 # Split Parallel Debugger (spd)
-This bash script helps to debug distributed applications. It relies on `tmux` to display
-each rank in a correct manner. No installation are needed except maybe the creation of a `RC file`
+
+This bash script helps to debug distributed applications.
+It relies on `tmux` to display each rank in a correct manner. 
+No installation is needed except maybe the creation of a `RC file`
 which sets the paths and names of different variables and executables.
 
 This script allows the user to use two modes:
@@ -8,52 +10,80 @@ This script allows the user to use two modes:
 * gdb
 
 In all cases, a left pane is created that contains the **master worker** which is
-responsible of the management of the parallel execution.
+responsible for the management of the parallel execution.
 
 ### split
-In this mode, the output of each process is redirected in a separated pane.
+In this mode, the output of each process is redirected in a separated pane
+using pipes.
 
 ### gdb
-When the script is used, a left pane contains the gdbserver and all stdout messages.
-The right part will contain all ranks with all gdb, one gdb per rank.
+In this mode, a left pane contains the gdbserver and all stdout messages.
+Each other pane is associated with a rank and a gdb, one gdb per rank.
 
 ## General execution
 
-In substance, the script creates a tmux session called `spd`, focuses on it if other tmux
-sessions exist. If so, the user has to **detach** in order to resume.
-Then the scripts creates either:
-* a pane per rank, waits a few seconds and then the master
-* the gdbserver, waits a few seconds and then creates a pane per rank.
+In substance, the script creates a tmux session called `spd`.
+Then the script creates:
+* a grid composed of panes
+* setup a master on the `MASTER_PANE`,
+* setup an environment per pane per rank.
 
 # Installation
-Clone the repo and move inside. No installation needed except maybe the creation of the RC file `.spdrc` in your `$HOME` directory.
+Clone the repository and move inside.
+No installation needed except maybe the creation of configuration file
+`spd_config.in` and RC file `.spdrc` either in your `${HOME}` directory or in the
+current project the user consider (see RC file session for more info).
 
-Also, you may add the path of the repo into your `PATH` environment variable:
+You may add the path of the repository into your `PATH` environment variable:
 ```
 export PATH+=:<path_of_the_repo>
 ```
 
-### RC file
-In order to setup the environment correctly, we provide a few examples for different
-plateforms in the folder `rc_files`.
+### Configuration and RC file
 
-Make a copy of one of them into your $HOME, and rename it `.spdrc` as follow:
+The general configuration of the script goes through the `spd_config.in` file.
+
+It is possible to overwrite this file by creating a user
+configuration file with the same name but located in a different place.
+The order of loading is defined as follow:
+* Try to load `./spd_config.in`,
+* else, try to load `${HOME}/spd_config.in`,
+* else, try to load `${SPD_ROOT}/spd_config.in`.
+
+The definition of multiple configuration files allows the user to globally
+(i,e, in ${HOME}) or locally (i,e, ./) overwrite the general behavior of the
+script.
+
+Moreover, it is possible to overwrite a subset of the configuration file by
+creating a `RC file` named `.spdrc` either in ${HOME} or the local repository.
+
+This approach allows the user to define a behavior for an application that
+could be different from another application.
+
+In order to setup the environment correctly, we provide a few examples for
+different plateforms in the folder `rc_files`.
+
+Make a copy of one of them into your ${HOME}, and rename it `.spdrc` as follow:
 ```
-cp rc_files/spdrc_<machine_name> $HOME/.spdrc
+cp rc_files/spdrc_<machine_name> ${HOME}/.spdrc
 ```
 
 Then update it as needed.
 
-**Remark 1** By default, without `RC file`, only the `config_spd.in` file is read
-which sets `gdb` and `gdbserver` to the default, i.e., gdb and gdbserver available on the system.
+**Remark 1** By default, without `RC file`, only the `config_spd.in` file is
+read which sets `gdb` and `gdbserver` to the default, i.e., gdb and gdbserver
+available on the system.
 
-**Remark 2** We note that on some machines the GNU `gdb`/`gdbserver` do not work properly when reading the symbols.
-We then switch to `cuda-gdb`/`cuda-gdbserver`.
+**Remark 2** We note that on some machines the GNU `gdb`/`gdbserver` do not
+work properly when reading the symbols.  We then switch to
+`cuda-gdb`/`cuda-gdbserver` using `.spdrc` for example.
 
 # Environment
-We use the `tmux` software to display and manage the different modes of execution.
-We recommand `tmux/3.1b` as we are basically using it for development.
-It does not mean this script does not work with another version, just no guarantee.
+We use the `tmux` software to display and manage the different modes of
+execution.  We recommand at least `tmux/3.1b` as we basically have used using
+it during development.
+It does not mean this script does not work with older versions, just no
+guarantee.
 
 ### Some tmux commands
 Tmux uses a prefix key, which is by default `Ctrl-b`.
@@ -97,38 +127,48 @@ This command will launch one instance of gdb on each pane and they all connect t
 
 ## Remarks
 Some remarks:
-* For now, we do not parse automatically the command line, so we **need** to provide the name of the executable using *--exec*, with the **EXACT** same syntax as used in mpirun.
+* For now, we do not have a way to parse automatically the command line, so we **need** to provide the name of the executable using *--exec*, with the **EXACT** same syntax as used in mpirun. It could be set through a local `RC file`.
 * The flag *--run* must be the **last flag** relative to spd
 * It seems (at least on Saturn) even when the flag `--cuda-use-lockfile=0` is used, it is not possible to use cuda-gdb when the number of MPI processes is greater than the number of GPU (at least -n 2 and 1 GPU does not work. Error: gdbserver: Another cuda-gdb instance is working with the lock file. Try again
 
 ## Additional flags
 
-### *--gdbaddcmd* flag
+Here is a non-exhaustive list of additional flags. For a full list,
+```
+spd -h
+```
+or
+```
+spd --help
+```
+
+### *--gdb_add_cmd* flag
 Some additional arguments of `spd` can be provided. For example, we can pass 
 gdb commands to all gdb instances, all at once. For that, we use the flag `--gdbaddcmd`, as follow:
 ```
-spd -p 2 -q 6 --gdbaddcmd "-ex 'c'" --exec ./exec_name --run mpirun -n 12 ./exec_name <params_list>
+spd -p 2 -q 6 --gdb_add_cmd "-ex 'c'" --exec ./exec_name --run mpirun -n 12 ./exec_name <params_list>
 ```
 
 In the example above, we request all gdb to execute `continue`.
 
 ```
-spd -p 3 -q 3 --gdbaddcmd "-ex 'b MPI_Init' -ex 'c'" --exec ./exec_name --run mpirun -n 9 ./exec_name <params_list>
+spd -p 3 -q 3 --gdb_add_cmd "-ex 'b MPI_Init' -ex 'c'" --exec ./exec_name --run mpirun -n 9 ./exec_name <params_list>
 ```
 In the example above, we put a breakpoint when `MPI_Init` routine is encountered and then we start the execution.
 It means all nine ranks will execute the sequence of instructions.
 
-### paging flag (**EXPERIMENTAL - DISABLE FOR NOW**)
-When a large number of ranks have to be debugged, the standard display might not
+### paging flag (**EXPERIMENTAL**)
+When a large number of ranks have to be considered, the standard display might not
 be convenient. We added an experimental flag `--paging` that splits the 
-nodes into groups of two nodes, displaying one group per tmux window:
+nodes into groups of <int> nodes, displaying one group per tmux window:
 ```
-spd -p 6 -q 6 --paging --exec ./exec_name --run mpirun -n 36 ./exec_name <param_list>
+spd -p 6 -q 6 --paging 1 --exec ./exec_name --run mpirun -n 36 ./exec_name <param_list>
 ```
 
-### ranks flags (**EXPERIMENTAL - DISABLE FOR NOW**)
-Sometimes, we know the subset of ranks we want to debug. For that, we introduce
-the flag `--ranks` followed by a list of rank_id, all separated by a comma (for now):
+### ranks flags (**EXPERIMENTAL**)
+Sometimes, we know the subset of ranks we want to focus on. For that, we
+introduce the flag `--ranks` followed by a (unordered) list of rank_id, all
+separated by a comma:
 ```
 spd -p 4 -q 2 --ranks 0,1,7 --exec ./exec_name --run mpirun -n 8 ./exec_name <param_list>
 ```
