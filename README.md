@@ -172,3 +172,46 @@ separated by a comma:
 ```
 spd -p 4 -q 2 --ranks 0,1,7 --exec ./exec_name --run mpirun -n 8 ./exec_name <param_list>
 ```
+
+# Sandbox
+
+If you want to play with it, we provide a test file named `example.c` and
+located in `test` directory.
+This example contains a few scenarii that generate different signals like `SIGSEGV`.
+
+To compile it,
+```
+cd test && make
+```
+
+Now, the user can use it to test this script.
+Here is a non-exhaustive list of executions and the expected output.
+
+Create a grid of size 2x2:
+```
+./spd -p 2 -q 2 --exec ./test/example --run mpirun -n 4 ./test/example
+```
+
+Create a max size grid of 3x2 but focus on ranks 1 and 3:
+```
+./spd -p 3 -q 2 --ranks 3,1 --create_grid 1 --attach 1 --unpack_ranks 0 --exec ./test/example --run mpirun -n 6 ./test/example
+```
+
+Explanation:
+* Create a grid of maximum size 3x2
+* Attach to the spd session at the end of the execution of the script
+* Since we request a subset of ranks, do not unpack them onto the grid
+
+Let the grid already exist, say through:
+```
+./spd -p 3 -q 2 --create_grid 1 --attach 1 --exec ./test/example --run mpirun -n 6 ./test/example
+```
+then, focus on a subset and map then on this existing grid:
+```
+./spd -p 3 -q 2 --ranks 3,1,4 --create_grid 0 --attach 1 --unpack_ranks 1 --exec ./test/example --run mpirun -n 6 ./test/example
+```
+
+Use the paging to display the grid differently:
+```
+./spd -p 3 -q 2 --paging 1 --create_grid 1 --attach 1 --exec ./test/example --run mpirun -n 6 ./test/example
+```
