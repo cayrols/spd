@@ -341,7 +341,7 @@ set -e
   map_ranks ${MASTER_WINDOW} ${nwindows} ${nrow_per_window}
 
   # Attach to the session
-  if [ ${FORCE_ATTACH} -eq ${TRUE} ]; then
+  if [ ${SPD_FORCE_TMUX_ATTACH_SESSION} -eq ${TRUE} ]; then
     if [ ${SPD_TMUX_USE_USER_SOCKET} -eq ${TRUE} ]; then
       ${TMUX_CMD} attach -t ${SPD_TMUX_SESSION_NAME}
     else
@@ -487,7 +487,7 @@ chelp() {
   bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
   echo -e "\t\tAllows the user to not recreate the grid."
 
-  bold    "\t--attach <bool: DEFAULT ${FORCE_ATTACH-}>"
+  bold    "\t--attach <bool: DEFAULT ${SPD_FORCE_TMUX_ATTACH_SESSION-}>"
   echo -e "\t\tForce to attach to the created tmux."
 
   bold    "\t--create_grid <bool: DEFAULT ${SPD_UPDATE_PANES-}>"
@@ -556,9 +556,9 @@ parse_param() {
       case $1 in
         --attach)
           shift
-          FORCE_ATTACH=${TRUE}
+          SPD_FORCE_TMUX_ATTACH_SESSION=${TRUE}
           if [ $1 -eq 0 ]; then
-            FORCE_ATTACH=${FALSE}
+            SPD_FORCE_TMUX_ATTACH_SESSION=${FALSE}
           fi
           shift
           ;;

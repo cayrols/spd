@@ -43,6 +43,9 @@ SPD_TMUX_SESSION_NAME=spd
 
 SPD_TMUX_USE_USER_SOCKET=${TRUE}
 
+# Control whether the user is attached to the TMUX session
+SPD_FORCE_TMUX_ATTACH_SESSION=${FALSE}
+
 # Create the grid where the script is called.
 SPD_GRID_LOCAL=${FALSE}
 
@@ -113,9 +116,6 @@ SPD_PIPE_DIR=${SPD_USER_DIR}/local_fifos
 
 #--------------------------------------------------------------------------
 # EXTRA
-
-# Control whether the user is attached to the TMUX session
-FORCE_ATTACH=${FALSE}
 
 # Python binary to use
 PYTHON_BIN=python3
